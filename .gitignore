@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build
+packages/plugin/dist/
