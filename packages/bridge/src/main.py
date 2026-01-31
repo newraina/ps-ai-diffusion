@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from src.state import state, BackendType
 from src.comfy import connect_to_comfy
+from src.models import GenerateRequest, GenerateResponse
 
 app = FastAPI(title="PS AI Bridge", version="0.1.0")
 
@@ -42,3 +43,11 @@ async def post_connection(request: ConnectionRequest):
         "comfy_url": state.comfy_url,
         "error": state.error_message,
     }
+
+
+@app.post("/api/generate")
+async def generate(request: GenerateRequest):
+    # For now, just return a job ID
+    # Actual generation will be implemented in next task
+    response = GenerateResponse.create()
+    return response.model_dump()
