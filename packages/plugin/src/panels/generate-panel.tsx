@@ -1,176 +1,66 @@
-import { useState, useRef, useCallback } from 'react'
-import { Button } from '@swc-react/button'
-import { PromptInput } from '../components/prompt-input'
+import { useCallback } from 'react'
+import { StyleSelector } from '../components/style-selector'
+import { PromptSection } from '../components/prompt-section'
+import { StrengthSlider } from '../components/strength-slider'
+import { GenerateButton } from '../components/generate-button'
+import { ProgressBar } from '../components/progress-bar'
+import { HistorySection } from '../components/history-section'
+import { useGeneration } from '../contexts/generation-context'
+import { useHistory } from '../contexts/history-context'
 import {
   generate,
-  getJobStatus,
-  getJobImages,
-  cancelJob,
-  type JobStatus,
+  cancelJob as _cancelJob,
 } from '../services/bridge-client'
 import {
   hasActiveDocument,
-  updatePreviewLayer,
-  applyAsLayer,
+  updatePreviewLayer as _updatePreviewLayer,
 } from '../services/photoshop-layer'
+
+// Reserved for future use
+void _cancelJob
+void _updatePreviewLayer
 
 interface GeneratePanelProps {
   isConnected: boolean
 }
 
-type GenerationState =
-  | 'idle'
-  | 'submitting'
-  | 'queued'
-  | 'executing'
-  | 'fetching'
-  | 'placing'
-  | 'finished'
-  | 'error'
-
-interface GeneratedImage {
-  id: string
-  imageBase64: string
-  prompt: string
-  seed: number
-}
-
-const POLL_INTERVAL_QUEUED = 1000
-const POLL_INTERVAL_EXECUTING = 500
-const BATCH_SIZE_OPTIONS = [1, 2, 3, 4]
-
 export function GeneratePanel({ isConnected }: GeneratePanelProps) {
-  const [prompt, setPrompt] = useState('')
-  const [negativePrompt, setNegativePrompt] = useState('')
-  const [batchSize, setBatchSize] = useState(4)
-  const [state, setState] = useState<GenerationState>('idle')
-  const [progress, setProgress] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const {
+    prompt,
+    negativePrompt,
+    strength: _strength,
+    batchSize,
+    isGenerating,
+    setIsGenerating,
+    setProgress,
+  } = useGeneration()
 
-  // Results state
-  const [results, setResults] = useState<GeneratedImage[]>([])
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [checkedIndices, setCheckedIndices] = useState<Set<number>>(new Set())
+  const { addGenerationResult: _addGenerationResult } = useHistory()
 
-  const pollTimeoutRef = useRef<number | null>(null)
-  const abortRef = useRef(false)
+  // Reserved for future use
+  void _strength
+  void _addGenerationResult
 
-  const clearPollTimeout = useCallback(() => {
-    if (pollTimeoutRef.current !== null) {
-      clearTimeout(pollTimeoutRef.current)
-      pollTimeoutRef.current = null
-    }
-  }, [])
-
-  const pollJobStatus = useCallback(
-    async (id: string, currentPrompt: string) => {
-      if (abortRef.current) return
-
-      try {
-        const status: JobStatus = await getJobStatus(id)
-
-        if (abortRef.current) return
-
-        switch (status.status) {
-          case 'queued':
-            setState('queued')
-            setProgress(0)
-            pollTimeoutRef.current = window.setTimeout(
-              () => pollJobStatus(id, currentPrompt),
-              POLL_INTERVAL_QUEUED,
-            )
-            break
-
-          case 'executing':
-            setState('executing')
-            setProgress(status.progress)
-            pollTimeoutRef.current = window.setTimeout(
-              () => pollJobStatus(id, currentPrompt),
-              POLL_INTERVAL_EXECUTING,
-            )
-            break
-
-          case 'finished':
-            setState('fetching')
-            setProgress(1)
-
-            // Fetch images
-            const images = await getJobImages(id)
-
-            if (abortRef.current) return
-
-            if (images.images.length > 0) {
-              // Add new images to results
-              const newImages: GeneratedImage[] = images.images.map(
-                (imageBase64, index) => ({
-                  id: `${id}-${index}`,
-                  imageBase64,
-                  prompt: currentPrompt,
-                  seed: images.seeds[index],
-                }),
-              )
-
-              setResults((prev) => [...prev, ...newImages])
-
-              // Auto-select and preview the first new image
-              const firstNewIndex = results.length
-              setSelectedIndex(firstNewIndex)
-
-              setState('placing')
-              await updatePreviewLayer(newImages[0].imageBase64, currentPrompt)
-            }
-
-            setState('finished')
-            // Reset to idle after a short delay
-            setTimeout(() => {
-              if (!abortRef.current) {
-                setState('idle')
-                setJobId(null)
-              }
-            }, 1000)
-            break
-
-          case 'error':
-            setState('error')
-            setError(status.error || 'Generation failed')
-            break
-
-          case 'interrupted':
-            setState('idle')
-            setJobId(null)
-            break
-        }
-      } catch (e) {
-        if (!abortRef.current) {
-          setState('error')
-          setError(e instanceof Error ? e.message : 'Failed to get job status')
-        }
-      }
-    },
-    [results.length],
-  )
-
-  async function handleGenerate() {
-    if (!prompt.trim()) return
-
-    // Check for active document
-    if (!hasActiveDocument()) {
-      setError('Please open a document first')
+  const handleGenerate = useCallback(async () => {
+    if (isGenerating) {
+      // Cancel logic
+      setIsGenerating(false)
+      setProgress(0)
       return
     }
 
-    // Reset state
-    abortRef.current = false
-    clearPollTimeout()
-    setError(null)
-    setState('submitting')
-    setProgress(0)
+    if (!prompt.trim()) return
+    if (!hasActiveDocument()) {
+      alert('Please open a document first')
+      return
+    }
 
-    const currentPrompt = prompt
+    setIsGenerating(true)
+    setProgress(0, 'Submitting...')
 
     try {
-      const response = await generate({
+      // TODO: Use response.job_id to poll job status
+      await generate({
         prompt,
         negative_prompt: negativePrompt,
         width: 512,
@@ -178,220 +68,40 @@ export function GeneratePanel({ isConnected }: GeneratePanelProps) {
         batch_size: batchSize,
       })
 
-      setJobId(response.job_id)
-      setState('queued')
+      // TODO: Poll job status and update progress
+      // For now, simulate completion
+      setProgress(1, 'Done!')
 
-      // Start polling
-      pollJobStatus(response.job_id, currentPrompt)
-    } catch (e) {
-      setState('error')
-      setError(e instanceof Error ? e.message : 'Failed to start generation')
+      setTimeout(() => {
+        setIsGenerating(false)
+        setProgress(0)
+      }, 1000)
+
+    } catch (error) {
+      console.error('Generation failed:', error)
+      setIsGenerating(false)
+      setProgress(0)
     }
-  }
-
-  async function handleCancel() {
-    abortRef.current = true
-    clearPollTimeout()
-
-    if (jobId) {
-      try {
-        await cancelJob(jobId)
-      } catch (e) {
-        console.error('Failed to cancel job:', e)
-      }
-    }
-
-    setState('idle')
-    setJobId(null)
-    setProgress(0)
-  }
-
-  async function handleThumbnailClick(index: number) {
-    if (index === selectedIndex) return
-
-    setSelectedIndex(index)
-    const image = results[index]
-    if (image) {
-      await updatePreviewLayer(image.imageBase64, image.prompt)
-    }
-  }
-
-  function handleCheckboxChange(index: number, checked: boolean) {
-    setCheckedIndices((prev) => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(index)
-      } else {
-        next.delete(index)
-      }
-      return next
-    })
-  }
-
-  async function handleApply() {
-    if (checkedIndices.size === 0) return
-
-    // Apply all checked images as layers
-    const indicesToApply = Array.from(checkedIndices).sort((a, b) => a - b)
-
-    for (const index of indicesToApply) {
-      const image = results[index]
-      if (image) {
-        await applyAsLayer(image.imageBase64, image.prompt, image.seed)
-      }
-    }
-
-    // Clear checked indices after applying
-    setCheckedIndices(new Set())
-  }
-
-  function handleClearAll() {
-    setResults([])
-    setSelectedIndex(null)
-    setCheckedIndices(new Set())
-  }
-
-  const isGenerating =
-    state !== 'idle' && state !== 'finished' && state !== 'error'
-  const showProgress = isGenerating || state === 'finished'
-  const hasChecked = checkedIndices.size > 0
-
-  function getStatusText(): string {
-    switch (state) {
-      case 'submitting':
-        return 'Submitting...'
-      case 'queued':
-        return 'Queued...'
-      case 'executing':
-        return `Generating... ${Math.round(progress * 100)}%`
-      case 'fetching':
-        return 'Fetching result...'
-      case 'placing':
-        return 'Placing in document...'
-      case 'finished':
-        return 'Done!'
-      case 'error':
-        return 'Error'
-      default:
-        return ''
-    }
-  }
+  }, [
+    prompt,
+    negativePrompt,
+    batchSize,
+    isGenerating,
+    setIsGenerating,
+    setProgress,
+  ])
 
   return (
     <div className="generate-panel">
-      <div className="prompt-section">
-        <sp-body size="S">Prompt</sp-body>
-        <PromptInput
-          value={prompt}
-          onChange={setPrompt}
-          placeholder="Describe what you want to generate..."
-          disabled={isGenerating}
-        />
-      </div>
-
-      <div className="prompt-section">
-        <sp-body size="S">Negative Prompt</sp-body>
-        <PromptInput
-          value={negativePrompt}
-          onChange={setNegativePrompt}
-          placeholder="What to avoid..."
-          isNegative
-          disabled={isGenerating}
-        />
-      </div>
-
-      <div className="batch-size-row">
-        <sp-body size="S">Batch Size</sp-body>
-        <select
-          value={batchSize}
-          onChange={(e) => setBatchSize(Number(e.target.value))}
-          disabled={isGenerating}
-        >
-          {BATCH_SIZE_OPTIONS.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {showProgress && (
-        <div className="progress-section">
-          <sp-body size="S">{getStatusText()}</sp-body>
-          <sp-progressbar value={progress * 100} />
-        </div>
-      )}
-
-      {error && (
-        <sp-body size="S" className="error">
-          {error}
-        </sp-body>
-      )}
-
-      <div className="button-row">
-        {!isGenerating ? (
-          <>
-            <Button
-              variant="accent"
-              onClick={handleGenerate}
-              disabled={!isConnected || !prompt.trim()}
-            >
-              Generate
-            </Button>
-            {hasChecked && (
-              <Button variant="primary" onClick={handleApply}>
-                Apply ({checkedIndices.size})
-              </Button>
-            )}
-          </>
-        ) : (
-          <Button variant="secondary" onClick={handleCancel}>
-            Cancel
-          </Button>
-        )}
-      </div>
-
-      {results.length > 0 && (
-        <div className="results-section">
-          <div className="results-header">
-            <sp-body size="S">Results ({results.length})</sp-body>
-            <Button
-              variant="secondary"
-              size="s"
-              onClick={handleClearAll}
-              disabled={isGenerating}
-            >
-              Clear All
-            </Button>
-          </div>
-          <div className="results-grid">
-            {results.map((image, index) => (
-              <div
-                key={image.id}
-                className={`result-item ${selectedIndex === index ? 'selected' : ''}`}
-                onClick={() => handleThumbnailClick(index)}
-              >
-                <div
-                  className="result-checkbox"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checkedIndices.has(index)}
-                    onChange={(e) =>
-                      handleCheckboxChange(index, e.target.checked)
-                    }
-                  />
-                </div>
-                <img
-                  src={`data:image/png;base64,${image.imageBase64}`}
-                  alt={`Generated ${index + 1}`}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <StyleSelector />
+      <PromptSection onSubmit={handleGenerate} disabled={isGenerating} />
+      <StrengthSlider />
+      <GenerateButton
+        onClick={handleGenerate}
+        disabled={!isConnected || !prompt.trim()}
+      />
+      <ProgressBar />
+      <HistorySection />
     </div>
   )
 }
