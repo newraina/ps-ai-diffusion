@@ -4,7 +4,8 @@ from src.main import app
 
 
 @pytest.mark.asyncio
-async def test_generate_accepts_request():
+async def test_generate_requires_connection():
+    """Test that generate returns 503 when not connected to ComfyUI."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/api/generate", json={
@@ -13,6 +14,30 @@ async def test_generate_accepts_request():
             "height": 512,
         })
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     data = response.json()
-    assert "job_id" in data
+    assert "detail" in data
+    assert "Not connected" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_job_status_not_found():
+    """Test that job status returns 404 for unknown job."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/jobs/nonexistent-job-id")
+
+    assert response.status_code == 404
+    data = response.json()
+    assert "detail" in data
+    assert "not found" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_job_images_not_found():
+    """Test that job images returns 404 for unknown job."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/jobs/nonexistent-job-id/images")
+
+    assert response.status_code == 404

@@ -6,6 +6,7 @@ interface PromptInputProps {
   placeholder?: string
   label: string
   id?: string
+  disabled?: boolean
 }
 
 export function PromptInput({
@@ -14,6 +15,7 @@ export function PromptInput({
   placeholder,
   label,
   id,
+  disabled = false,
 }: PromptInputProps) {
   const inputId = id ?? `prompt-input-${label.toLowerCase().replace(/\s+/g, '-')}`
 
@@ -26,6 +28,7 @@ export function PromptInput({
         grows
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onInput={(e) => onChange((e.target as HTMLInputElement).value)}
       />
     </div>

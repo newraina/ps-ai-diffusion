@@ -17,6 +17,7 @@ export interface GenerateRequest {
   seed?: number
   image?: string
   mask?: string
+  batch_size?: number
 }
 
 export interface GenerateResponse {
@@ -58,6 +59,20 @@ export async function testConnection(
   return connect('local', comfyUrl, authToken)
 }
 
+export interface JobStatus {
+  job_id: string
+  status: 'queued' | 'executing' | 'finished' | 'error' | 'interrupted'
+  progress: number
+  error: string | null
+  image_count: number
+}
+
+export interface JobImages {
+  job_id: string
+  images: string[] // Base64 encoded PNG images
+  seeds: number[] // Seed used for each image
+}
+
 export async function generate(
   request: GenerateRequest,
 ): Promise<GenerateResponse> {
@@ -66,5 +81,37 @@ export async function generate(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Generation failed')
+  }
   return response.json()
+}
+
+export async function getJobStatus(jobId: string): Promise<JobStatus> {
+  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}`)
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to get job status')
+  }
+  return response.json()
+}
+
+export async function getJobImages(jobId: string): Promise<JobImages> {
+  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}/images`)
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to get job images')
+  }
+  return response.json()
+}
+
+export async function cancelJob(jobId: string): Promise<void> {
+  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}/cancel`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to cancel job')
+  }
 }
