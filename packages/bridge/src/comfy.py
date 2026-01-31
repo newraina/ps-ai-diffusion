@@ -5,6 +5,7 @@ from typing import Optional
 
 async def connect_to_comfy(url: str, auth_token: Optional[str] = None) -> bool:
     """Attempt to connect to ComfyUI server."""
+    url = url.rstrip("/")
     state.comfy_url = url
     state.auth_token = auth_token
     state.connection_status = ConnectionStatus.connecting
