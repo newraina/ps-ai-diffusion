@@ -36,14 +36,26 @@ export async function getConnection(): Promise<ConnectionStatus> {
 
 export async function connect(
   backend: 'local' | 'cloud' = 'local',
-  comfyUrl: string = 'http://localhost:8188',
+  comfyUrl?: string,
+  authToken?: string,
 ): Promise<ConnectionStatus> {
   const response = await fetch(`${BRIDGE_URL}/api/connection`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ backend, comfy_url: comfyUrl }),
+    body: JSON.stringify({
+      backend,
+      comfy_url: comfyUrl,
+      auth_token: authToken || null,
+    }),
   })
   return response.json()
+}
+
+export async function testConnection(
+  comfyUrl: string,
+  authToken?: string,
+): Promise<ConnectionStatus> {
+  return connect('local', comfyUrl, authToken)
 }
 
 export async function generate(
