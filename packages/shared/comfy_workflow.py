@@ -7,9 +7,9 @@ from uuid import uuid4
 import json
 import zlib
 
-from .image import Bounds, Extent, Image, ImageCollection
-from .resources import Arch, ControlMode
-from .util import base_type_match, client_logger as log
+from shared.image import Bounds, Extent, Image, ImageCollection
+from shared.resources import Arch, ControlMode
+from shared.util import base_type_match, client_logger as log
 
 
 class ComfyRunMode(Enum):

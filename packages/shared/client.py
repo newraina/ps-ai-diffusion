@@ -7,17 +7,17 @@ from enum import Enum
 from typing import Any, AsyncGenerator, Callable, Generic, Iterable, NamedTuple, TypeVar
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from .api import WorkflowInput
-from .comfy_workflow import ComfyObjectInfo
-from .image import ImageCollection, Point
-from .properties import Property, ObservableProperties
-from .files import FileLibrary, FileFormat
-from .style import Style
-from .settings import PerformanceSettings
-from .resources import ControlMode, ResourceKind, Arch, UpscalerName
-from .resources import CustomNode, ResourceId
-from .localization import translate as _
-from .util import client_logger as log, ensure
+from shared.api import WorkflowInput
+from shared.comfy_workflow import ComfyObjectInfo
+from shared.image import ImageCollection, Point
+from shared.properties import Property, ObservableProperties
+from shared.files import FileLibrary, FileFormat
+from shared.style import Style
+from shared.settings import PerformanceSettings
+from shared.resources import ControlMode, ResourceKind, Arch, UpscalerName
+from shared.resources import CustomNode, ResourceId
+from shared.localization import translate as _
+from shared.util import client_logger as log, ensure
 
 
 class ClientEvent(Enum):

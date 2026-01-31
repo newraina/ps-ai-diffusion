@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import NamedTuple, Optional, Any
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from .platform_tools import is_macos, is_windows
-from .util import encode_json, read_json_with_comments, user_data_dir, client_logger as log
-from .localization import translate as _
+from shared.platform_tools import is_macos, is_windows
+from shared.util import encode_json, read_json_with_comments, user_data_dir, client_logger as log
+from shared.localization import translate as _
 
 
 class ServerMode(Enum):

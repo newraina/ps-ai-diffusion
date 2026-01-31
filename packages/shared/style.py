@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from .api import CheckpointInput, LoraInput
-from .settings import Setting, settings
-from .resources import Arch
-from .localization import translate as _
-from .util import encode_json, find_unused_path, read_json_with_comments
-from .util import plugin_dir, user_data_dir, client_logger as log
+from shared.api import CheckpointInput, LoraInput
+from shared.settings import Setting, settings
+from shared.resources import Arch
+from shared.localization import translate as _
+from shared.util import encode_json, find_unused_path, read_json_with_comments
+from shared.util import plugin_dir, user_data_dir, client_logger as log
 
 
 class StyleSettings:

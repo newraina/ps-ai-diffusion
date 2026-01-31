@@ -9,24 +9,24 @@ from itertools import chain, product
 from time import time
 from typing import Any, Iterable, Optional, Sequence
 
-from .api import WorkflowInput
-from .client import Client, CheckpointInfo, ClientMessage, ClientEvent, DeviceInfo, ClientModels
-from .client import SharedWorkflow, TranslationPackage, ClientFeatures, ClientJobQueue, TextOutput
-from .client import JobInfoOutput, OutputBatchMode, Quantization, MissingResources
-from .client import filter_supported_styles, loras_to_upload
-from .comfy_workflow import ComfyObjectInfo
-from .files import FileFormat
-from .image import Image, ImageCollection, Point
-from .network import RequestManager, NetworkError
-from .websockets.src import websockets
-from .style import Styles
-from .resources import ControlMode, ResourceId, ResourceKind, Arch
-from .resources import CustomNode, UpscalerName, resource_id
-from .settings import PerformanceSettings, settings
-from .localization import translate as _
-from .util import client_logger as log, parse_enum
-from .workflow import create as create_workflow
-from . import platform_tools, resources, util
+from shared.api import WorkflowInput
+from shared.client import Client, CheckpointInfo, ClientMessage, ClientEvent, DeviceInfo, ClientModels
+from shared.client import SharedWorkflow, TranslationPackage, ClientFeatures, ClientJobQueue, TextOutput
+from shared.client import JobInfoOutput, OutputBatchMode, Quantization, MissingResources
+from shared.client import filter_supported_styles, loras_to_upload
+from shared.comfy_workflow import ComfyObjectInfo
+from shared.files import FileFormat
+from shared.image import Image, ImageCollection, Point
+from shared.network import RequestManager, NetworkError
+from shared.websockets.src import websockets
+from shared.style import Styles
+from shared.resources import ControlMode, ResourceId, ResourceKind, Arch
+from shared.resources import CustomNode, UpscalerName, resource_id
+from shared.settings import PerformanceSettings, settings
+from shared.localization import translate as _
+from shared.util import client_logger as log, parse_enum
+from shared.workflow import create as create_workflow
+from shared import platform_tools, resources, util
 
 if platform_tools.is_macos:
     import os

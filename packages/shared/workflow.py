@@ -6,23 +6,23 @@ from typing import Any, NamedTuple
 import math
 import random
 
-from . import resolution, resources
-from .api import ControlInput, ImageInput, CheckpointInput, SamplingInput, WorkflowInput, LoraInput
-from .api import ExtentInput, InpaintMode, InpaintParams, FillMode, ConditioningInput, WorkflowKind
-from .api import RegionInput, CustomWorkflowInput, UpscaleInput
-from .image import Bounds, Extent, Image, ImageCollection, Mask, multiple_of
-from .client import ClientModels, ModelDict, Quantization, resolve_arch
-from .files import FileLibrary, FileFormat
-from .style import Style, StyleSettings, SamplerPresets
-from .resolution import ScaledExtent, ScaleMode, TileLayout, get_inpaint_reference
-from .resources import ControlMode, Arch, UpscalerName, ResourceKind, ResourceId
-from .settings import PerformanceSettings
-from .text import eval_wildcards, extract_layers, merge_prompt, extract_loras, strip_prompt_comments
-from .comfy_workflow import ComfyWorkflow, ComfyRunMode, Input, Output, ConditioningOutput
-from .comfy_workflow import ComfyNode
-from .localization import translate as _
-from .settings import settings
-from .util import ensure, median_or_zero, unique
+from shared import resolution, resources
+from shared.api import ControlInput, ImageInput, CheckpointInput, SamplingInput, WorkflowInput, LoraInput
+from shared.api import ExtentInput, InpaintMode, InpaintParams, FillMode, ConditioningInput, WorkflowKind
+from shared.api import RegionInput, CustomWorkflowInput, UpscaleInput
+from shared.image import Bounds, Extent, Image, ImageCollection, Mask, multiple_of
+from shared.client import ClientModels, ModelDict, Quantization, resolve_arch
+from shared.files import FileLibrary, FileFormat
+from shared.style import Style, StyleSettings, SamplerPresets
+from shared.resolution import ScaledExtent, ScaleMode, TileLayout, get_inpaint_reference
+from shared.resources import ControlMode, Arch, UpscalerName, ResourceKind, ResourceId
+from shared.settings import PerformanceSettings
+from shared.text import eval_wildcards, extract_layers, merge_prompt, extract_loras, strip_prompt_comments
+from shared.comfy_workflow import ComfyWorkflow, ComfyRunMode, Input, Output, ConditioningOutput
+from shared.comfy_workflow import ComfyNode
+from shared.localization import translate as _
+from shared.settings import settings
+from shared.util import ensure, median_or_zero, unique
 
 
 def detect_inpaint_mode(extent: Extent, area: Bounds):

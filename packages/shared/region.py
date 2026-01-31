@@ -2,16 +2,16 @@ from __future__ import annotations
 from enum import Enum
 from PyQt5.QtCore import QObject, QMetaObject, QUuid, pyqtSignal
 
-from . import eventloop, model, workflow
-from .api import ConditioningInput, RegionInput
-from .client import Client
-from .image import Image, Bounds, Extent
-from .document import Layer, LayerType
-from .properties import Property, ObservableProperties
-from .jobs import JobRegion
-from .control import ControlLayerList
-from .settings import settings
-from .style import Style
+from shared import eventloop, model, workflow
+from shared.api import ConditioningInput, RegionInput
+from shared.client import Client
+from shared.image import Image, Bounds, Extent
+from shared.document import Layer, LayerType
+from shared.properties import Property, ObservableProperties
+from shared.jobs import JobRegion
+from shared.control import ControlLayerList
+from shared.settings import settings
+from shared.style import Style
 
 
 class RegionLink(Enum):
@@ -371,7 +371,7 @@ class RootRegion(QObject, ObservableProperties):
 
 
 def translate_prompt(region: Region | RootRegion):
-    from .root import root
+    from shared.root import root
 
     if client := root.connection.client_if_connected:
         if settings.prompt_translation and client.features.translation:

@@ -51,7 +51,7 @@ async def create_process(
     )
     if is_windows and is_job:
         try:
-            from . import win32
+            from shared import win32
 
             win32.attach_process_to_job(p.pid)
         except Exception:

@@ -4,14 +4,14 @@ from typing import Any, NamedTuple
 from pathlib import Path
 import json
 
-from . import model, jobs, resources, util
-from .api import ControlInput
-from .layer import Layer, LayerType
-from .resources import ControlMode, ResourceKind, Arch, resource_id
-from .properties import Property, ObservableProperties
-from .image import Bounds, Extent, Image
-from .localization import translate as _
-from .util import client_logger as log
+from shared import model, jobs, resources, util
+from shared.api import ControlInput
+from shared.layer import Layer, LayerType
+from shared.resources import ControlMode, ResourceKind, Arch, resource_id
+from shared.properties import Property, ObservableProperties
+from shared.image import Bounds, Extent, Image
+from shared.localization import translate as _
+from shared.util import client_logger as log
 
 
 class ControlLayer(QObject, ObservableProperties):
@@ -49,7 +49,7 @@ class ControlLayer(QObject, ObservableProperties):
     modified = pyqtSignal(QObject, str)
 
     def __init__(self, model: model.Model, mode: ControlMode, layer_id: QUuid, index: int):
-        from .root import root
+        from shared.root import root
 
         super().__init__()
         self._model = model
@@ -137,7 +137,7 @@ class ControlLayer(QObject, ObservableProperties):
         self.has_active_job = True
 
     def _update_is_supported(self):
-        from .root import root
+        from shared.root import root
 
         is_supported = True
         if client := root.connection.client_if_connected:
@@ -199,7 +199,7 @@ class ControlLayer(QObject, ObservableProperties):
         self.is_pose_vector = self.mode is ControlMode.pose and self.layer.type is LayerType.vector
 
     def _update_active_job(self):
-        from .jobs import JobState
+        from shared.jobs import JobState
 
         active = not (self._generate_job is None or self._generate_job.state is JobState.finished)
         if self.has_active_job and not active:

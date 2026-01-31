@@ -4,11 +4,11 @@ import re
 from pathlib import Path
 from typing import Tuple, List, NamedTuple
 
-from .api import LoraInput
-from .files import FileCollection, FileSource
-from .localization import translate as _
-from .util import client_logger as log
-from .jobs import JobParams
+from shared.api import LoraInput
+from shared.files import FileCollection, FileSource
+from shared.localization import translate as _
+from shared.util import client_logger as log
+from shared.jobs import JobParams
 
 # Functions to convert between position in Python str objects (unicode) and
 # index in QString char16 arrays (used in eg. QTextCursor).

@@ -3,11 +3,11 @@ import math
 from enum import Enum
 from typing import NamedTuple, overload
 
-from .api import ExtentInput, ImageInput, WorkflowKind
-from .image import Bounds, Extent, Image, Point, multiple_of
-from .resources import Arch
-from .settings import PerformanceSettings
-from .style import Style
+from shared.api import ExtentInput, ImageInput, WorkflowKind
+from shared.image import Bounds, Extent, Image, Point, multiple_of
+from shared.resources import Arch
+from shared.settings import PerformanceSettings
+from shared.style import Style
 
 
 def compute_bounds(extent: Extent, mask_bounds: Bounds | None, op: WorkflowKind):

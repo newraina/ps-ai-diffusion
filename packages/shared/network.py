@@ -9,8 +9,8 @@ from typing import NamedTuple
 from PyQt5.QtCore import QByteArray, QUrl, QFile, QBuffer
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply, QSslError
 
-from .localization import translate as _
-from .util import client_logger as log
+from shared.localization import translate as _
+from shared.util import client_logger as log
 
 
 class NetworkError(Exception):

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import NamedTuple
 
-from .util import user_data_dir, client_logger as log
+from shared.util import user_data_dir, client_logger as log
 
 
 class Language(NamedTuple):

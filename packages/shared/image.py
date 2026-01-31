@@ -6,9 +6,9 @@ from PyQt5.QtCore import Qt, QByteArray, QBuffer, QRect, QSize, QFile, QIODevice
 from typing import Callable, Iterable, SupportsIndex, Tuple, NamedTuple, Union, Optional
 from pathlib import Path
 
-from .settings import settings, ImageFileFormat
-from .platform_tools import is_linux
-from .util import clamp, ensure, client_logger as log
+from shared.settings import settings, ImageFileFormat
+from shared.platform_tools import is_linux
+from shared.util import clamp, ensure, client_logger as log
 
 import struct
 import zlib
