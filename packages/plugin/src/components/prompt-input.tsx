@@ -1,5 +1,4 @@
 import { Textfield } from '@swc-react/textfield'
-import { FieldLabel } from '@swc-react/field-label'
 
 interface PromptInputProps {
   value: string
@@ -20,7 +19,7 @@ export function PromptInput({
 
   return (
     <div className="prompt-input">
-      <FieldLabel for={inputId}>{label}</FieldLabel>
+      <sp-body size="S">{label}</sp-body>
       <Textfield
         id={inputId}
         multiline

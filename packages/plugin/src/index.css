@@ -76,10 +76,22 @@ button:disabled {
   gap: 16px;
 }
 
+.generate-panel > sp-button {
+  width: 100%;
+}
+
 .prompt-input {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.prompt-input sp-body {
+  color: #999;
+}
+
+.prompt-input sp-textfield {
+  width: 100%;
 }
 
 .prompt-input label {
