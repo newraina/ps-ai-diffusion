@@ -8,8 +8,18 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
+interface UXPDialog extends HTMLDialogElement {
+  uxpShowModal(options?: {
+    title?: string
+    resize?: 'none' | 'horizontal' | 'vertical' | 'both'
+    size?: { width?: number; height?: number }
+  }): Promise<string>
+}
+
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const dialogRef = useRef<UXPDialog>(null)
+  const comfyUrlRef = useRef<HTMLInputElement>(null)
+  const authTokenRef = useRef<HTMLInputElement>(null)
   const [settings, setSettings] = useState<Settings>(getSettings)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{
@@ -22,23 +32,49 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (!dialog) return
 
     if (isOpen) {
-      dialog.showModal()
-    } else {
-      dialog.close()
+      dialog.uxpShowModal({
+        title: 'Settings',
+        resize: 'none',
+        size: { width: 600, height: 400 },
+      }).then(() => {
+        onClose()
+      })
     }
-  }, [isOpen])
+  }, [isOpen, onClose])
 
+  // Sync sp-textfield values via refs (web components don't work well with React controlled inputs)
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
+    if (comfyUrlRef.current) {
+      comfyUrlRef.current.value = settings.comfyUrl
+    }
+    if (authTokenRef.current) {
+      authTokenRef.current.value = settings.authToken
+    }
+  }, [settings])
 
-    function handleClose() {
-      onClose()
+  // Attach event listeners for sp-textfield inputs
+  useEffect(() => {
+    const comfyUrl = comfyUrlRef.current
+    const authToken = authTokenRef.current
+
+    function handleComfyUrlChange(e: Event) {
+      const target = e.target as HTMLInputElement
+      setSettings((prev) => ({ ...prev, comfyUrl: target.value }))
     }
 
-    dialog.addEventListener('close', handleClose)
-    return () => dialog.removeEventListener('close', handleClose)
-  }, [onClose])
+    function handleAuthTokenChange(e: Event) {
+      const target = e.target as HTMLInputElement
+      setSettings((prev) => ({ ...prev, authToken: target.value }))
+    }
+
+    comfyUrl?.addEventListener('input', handleComfyUrlChange)
+    authToken?.addEventListener('input', handleAuthTokenChange)
+
+    return () => {
+      comfyUrl?.removeEventListener('input', handleComfyUrlChange)
+      authToken?.removeEventListener('input', handleAuthTokenChange)
+    }
+  }, [])
 
   async function handleSave() {
     setTesting(true)
@@ -51,6 +87,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       )
       if (result.status === 'connected') {
         setTestResult({ success: true, message: 'Connection successful' })
+        saveSettings(settings)
       } else {
         setTestResult({
           success: false,
@@ -62,76 +99,55 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     } finally {
       setTesting(false)
     }
-
-    saveSettings(settings)
   }
 
   function handleCancel() {
     setSettings(getSettings())
     setTestResult(null)
-    dialogRef.current?.close()
+    dialogRef.current?.close('cancel')
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="settings-dialog"
-      aria-labelledby="settings-modal-title"
-    >
-      <h2 id="settings-modal-title" className="modal-title">Settings</h2>
-
-      <div className="modal-body">
-        <div className="form-field">
-          <label htmlFor="comfy-url">ComfyUI Server</label>
-          <input
-            id="comfy-url"
-            type="text"
-            value={settings.comfyUrl}
-            onChange={(e) =>
-              setSettings({ ...settings, comfyUrl: e.target.value })
-            }
+    <dialog ref={dialogRef} className="settings-dialog">
+      <div className="dialog-scroll-container">
+        <sp-body size="S" className="form-field">
+          <sp-textfield
+            ref={comfyUrlRef}
             placeholder="http://localhost:8188"
-          />
-        </div>
+            style={{ width: '100%' }}
+          >
+            <sp-label slot="label">ComfyUI Server</sp-label>
+          </sp-textfield>
+        </sp-body>
 
-        <div className="form-field">
-          <label htmlFor="auth-token">Auth Token (optional)</label>
-          <input
-            id="auth-token"
+        <sp-body size="S" className="form-field">
+          <sp-textfield
+            ref={authTokenRef}
             type="password"
-            value={settings.authToken}
-            onChange={(e) =>
-              setSettings({ ...settings, authToken: e.target.value })
-            }
             placeholder="Enter token if required"
-          />
-        </div>
+            style={{ width: '100%' }}
+          >
+            <sp-label slot="label">Auth Token (optional)</sp-label>
+          </sp-textfield>
+        </sp-body>
 
         {testResult && (
-          <div
+          <sp-body
+            size="S"
             className={`test-result ${testResult.success ? 'success' : 'error'}`}
           >
             {testResult.success ? '✓' : '✗'} {testResult.message}
-          </div>
+          </sp-body>
         )}
       </div>
 
       <div className="modal-footer">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={handleCancel}
-        >
+        <sp-button variant="secondary" onClick={handleCancel}>
           Cancel
-        </button>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={handleSave}
-          disabled={testing}
-        >
+        </sp-button>
+        <sp-button variant="cta" onClick={handleSave} disabled={testing || undefined}>
           {testing ? 'Testing...' : 'Save'}
-        </button>
+        </sp-button>
       </div>
     </dialog>
   )
