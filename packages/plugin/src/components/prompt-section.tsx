@@ -7,6 +7,26 @@ interface PromptSectionProps {
   disabled?: boolean
 }
 
+function getLineHeightPx(textarea: HTMLTextAreaElement): number {
+  const styles = getComputedStyle(textarea)
+  const lineHeightRaw = styles.lineHeight
+  const fontSizePx = parseFloat(styles.fontSize) || 12
+
+  // UXP may return unitless line-height (e.g. "1.4") instead of px.
+  if (lineHeightRaw.endsWith('px')) {
+    const px = parseFloat(lineHeightRaw)
+    return Number.isFinite(px) && px > 0 ? px : fontSizePx * 1.4
+  }
+
+  const unitless = parseFloat(lineHeightRaw)
+  if (Number.isFinite(unitless) && unitless > 0) {
+    return fontSizePx * unitless
+  }
+
+  // "normal" or other non-numeric values.
+  return fontSizePx * 1.4
+}
+
 export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps) {
   const MIN_PROMPT_ROWS = 2
   // Keep a very high cap to avoid breaking layout with unbounded growth.
@@ -29,8 +49,7 @@ export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps
 
   const beginDrag = useCallback((clientY: number, mode: 'pointer' | 'mouse', pointerId?: number) => {
     const textarea = sectionRef.current?.querySelector('textarea')
-    const lineHeightRaw = textarea ? parseFloat(getComputedStyle(textarea).lineHeight) : NaN
-    const lineHeight = Number.isFinite(lineHeightRaw) && lineHeightRaw > 0 ? lineHeightRaw : 18
+    const lineHeight = textarea ? getLineHeightPx(textarea) : 18
 
     dragStateRef.current = {
       startY: clientY,
@@ -72,7 +91,8 @@ export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps
     const updateFromClientY = (clientY: number) => {
       const deltaY = clientY - dragStateRef.current.startY
       const step = dragStateRef.current.lineHeight
-      const deltaRows = Math.round(deltaY / step)
+      // Use full-line steps (less "twitchy" than rounding at half a line).
+      const deltaRows = deltaY >= 0 ? Math.floor(deltaY / step) : Math.ceil(deltaY / step)
       const newRows = clampRows(dragStateRef.current.startRows + deltaRows)
       setPromptRows(newRows)
     }
