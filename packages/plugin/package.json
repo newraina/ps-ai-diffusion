@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && cp manifest.json dist/",
+    "build": "tsc && vite build && cp manifest.json dist/ && sed -i '' 's/type=\"module\" crossorigin //' dist/index.html",
     "preview": "vite preview"
   },
   "dependencies": {
