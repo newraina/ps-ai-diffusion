@@ -1,0 +1,42 @@
+{
+  "id": "com.example.ps-ai-diffusion",
+  "name": "PS AI Diffusion",
+  "version": "0.1.0",
+  "main": "index.html",
+  "host": {
+    "app": "PS",
+    "minVersion": "24.0.0"
+  },
+  "manifestVersion": 5,
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "mainPanel",
+      "label": {
+        "default": "AI Diffusion"
+      },
+      "minimumSize": {
+        "width": 300,
+        "height": 400
+      },
+      "maximumSize": {
+        "width": 600,
+        "height": 1200
+      },
+      "preferredDockedSize": {
+        "width": 320,
+        "height": 500
+      },
+      "preferredFloatingSize": {
+        "width": 320,
+        "height": 500
+      }
+    }
+  ],
+  "requiredPermissions": {
+    "network": {
+      "domains": ["http://localhost:7860"]
+    },
+    "localFileSystem": "request"
+  }
+}
