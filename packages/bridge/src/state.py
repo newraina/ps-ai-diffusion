@@ -20,6 +20,7 @@ class AppState:
     connection_status: ConnectionStatus = ConnectionStatus.disconnected
     backend_type: BackendType = BackendType.local
     comfy_url: str = "http://localhost:8188"
+    auth_token: Optional[str] = None
     error_message: Optional[str] = None
 
 
