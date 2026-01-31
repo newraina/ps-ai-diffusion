@@ -85,8 +85,8 @@ POST /api/generate    → Submit generation task
 | `packages/bridge/src/generator.py` | WorkflowInput creation |
 | `packages/shared/api.py` | Data model definitions |
 | `packages/shared/comfy_client.py` | ComfyUI protocol |
-| `packages/plugin/src/App.tsx` | Root component |
-| `packages/plugin/src/services/bridgeClient.ts` | HTTP API client |
+| `packages/plugin/src/app.tsx` | Root component |
+| `packages/plugin/src/services/bridge-client.ts` | HTTP API client |
 
 ## Syncing Shared Modules
 
