@@ -34,9 +34,9 @@ python run.py
 ### UXP Plugin
 ```bash
 cd packages/plugin
-npm install
-npm run dev      # Vite dev server
-npm run build    # Production build
+pnpm install
+pnpm run dev      # Vite dev server
+pnpm run build    # Production build
 ```
 
 ### Testing
