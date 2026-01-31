@@ -18,3 +18,6 @@ node_modules/
 
 # Build
 packages/plugin/dist/
+
+# AI
+.claude/*.local.json
