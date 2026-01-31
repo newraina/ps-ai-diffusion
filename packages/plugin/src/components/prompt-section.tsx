@@ -13,12 +13,12 @@ export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps
   const MAX_PROMPT_ROWS = 999
 
   const { prompt, setPrompt, negativePrompt, setNegativePrompt } = useGeneration()
-  const [promptRows, setPromptRows] = useState(4)
+  const [promptRows, setPromptRows] = useState(MIN_PROMPT_ROWS)
   const [isDragging, setIsDragging] = useState(false)
   const sectionRef = useRef<HTMLDivElement>(null)
   const dragStateRef = useRef({
     startY: 0,
-    startRows: 4,
+    startRows: MIN_PROMPT_ROWS,
     lineHeight: 18,
     pointerId: null as number | null,
     mode: 'pointer' as 'pointer' | 'mouse',
