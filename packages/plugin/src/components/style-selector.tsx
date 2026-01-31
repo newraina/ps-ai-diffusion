@@ -12,7 +12,12 @@ const workspaceIcons: Record<Workspace, string> = {
   custom: '⚙',
 }
 
-export function StyleSelector() {
+interface StyleSelectorProps {
+  onOpenSettings?: () => void
+  connectionStatus?: string
+}
+
+export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelectorProps) {
   const { workspace, setWorkspace, style, setStyle } = useGeneration()
 
   const handleStyleChange = (e: Event) => {
@@ -30,8 +35,9 @@ export function StyleSelector() {
   return (
     <div className="style-selector">
       <div className="workspace-dropdown">
-        <ActionButton quiet className="workspace-button">
+        <ActionButton size="s" quiet className="workspace-button">
           <span className="workspace-icon">{workspaceIcons[workspace]}</span>
+          <span className="dropdown-arrow">▾</span>
         </ActionButton>
         <div className="workspace-menu">
           {(Object.keys(workspaceLabels) as Workspace[]).map(ws => (
@@ -59,9 +65,16 @@ export function StyleSelector() {
         ))}
       </select>
 
-      <ActionButton quiet className="settings-button" title="Settings">
+      <ActionButton
+        size="s"
+        quiet
+        className="settings-button"
+        title="Settings"
+        onClick={onOpenSettings}
+      >
         ⚙
       </ActionButton>
+      <span className={`status-dot ${connectionStatus ?? 'unknown'}`} />
     </div>
   )
 }

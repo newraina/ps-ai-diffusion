@@ -30,6 +30,7 @@ export function GenerateButton({ onClick, disabled = false }: GenerateButtonProp
     <div className="generate-row">
       <div className="generate-button-group">
         <Button
+          size="s"
           variant={isGenerating ? 'secondary' : 'accent'}
           onClick={onClick}
           disabled={disabled && !isGenerating}
@@ -38,11 +39,11 @@ export function GenerateButton({ onClick, disabled = false }: GenerateButtonProp
           <span className="generate-icon">{getButtonIcon()}</span>
           <span>{getButtonText()}</span>
         </Button>
-        <ActionButton quiet className="mode-dropdown-button">
+        <ActionButton size="s" quiet className="mode-dropdown-button">
           ▼
         </ActionButton>
       </div>
-      <ActionButton quiet className="queue-button" title="Queue">
+      <ActionButton size="s" quiet className="queue-button" title="Queue">
         <span className="queue-icon">◷</span>
         <span className="queue-count">0</span>
       </ActionButton>

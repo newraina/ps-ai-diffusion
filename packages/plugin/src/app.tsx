@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@swc-react/button'
-import { ActionButton } from '@swc-react/action-button'
 import { GeneratePanel } from './panels/generate-panel'
 import { GenerationProvider } from './contexts/generation-context'
 import { HistoryProvider } from './contexts/history-context'
@@ -55,31 +54,21 @@ function App() {
     <GenerationProvider>
       <HistoryProvider>
         <div className="app">
-          <header>
-            <sp-heading size="M">AI Image Generation</sp-heading>
-            <div className="header-actions">
-              <ActionButton
-                quiet
-                onClick={() => setSettingsOpen(true)}
-                title="Settings"
-              >
-                ⚙
-              </ActionButton>
-              <span className={`status-dot ${connection?.status ?? 'unknown'}`} />
-            </div>
-          </header>
-
           {error && <sp-body size="S" className="error">{error}</sp-body>}
 
           {!isConnected ? (
             <div className="connection-section">
               <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
-              <Button variant="primary" onClick={handleConnect} disabled={loading}>
+              <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
                 {loading ? 'Connecting...' : 'Connect to ComfyUI'}
               </Button>
             </div>
           ) : (
-            <GeneratePanel isConnected={isConnected} />
+            <GeneratePanel
+              isConnected={isConnected}
+              onOpenSettings={() => setSettingsOpen(true)}
+              connectionStatus={connection?.status}
+            />
           )}
 
           <SettingsModal

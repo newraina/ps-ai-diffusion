@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { PromptInput } from './prompt-input'
-import { ResizeHandle } from './resize-handle'
 import { useGeneration } from '../contexts/generation-context'
 
 interface PromptSectionProps {
@@ -10,29 +9,51 @@ interface PromptSectionProps {
 
 export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps) {
   const { prompt, setPrompt, negativePrompt, setNegativePrompt } = useGeneration()
-  const [promptRows, setPromptRows] = useState(3)
+  const [promptRows, setPromptRows] = useState(4)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStartY, setDragStartY] = useState(0)
   // TODO: Add toggle for negative prompt section
   const [showNegative, _setShowNegative] = useState(false)
 
-  const handleResize = useCallback((deltaY: number) => {
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+    setDragStartY(e.clientY)
+  }, [])
+
+  const handleResizeMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return
+    const deltaY = e.clientY - dragStartY
+    setDragStartY(e.clientY)
     setPromptRows(prev => {
-      const lineHeight = 20  // approximate
+      const lineHeight = 18
       const deltaRows = deltaY / lineHeight
-      return Math.max(2, Math.min(10, prev + deltaRows))
+      return Math.max(2, Math.min(12, prev + deltaRows))
     })
+  }, [isDragging, dragStartY])
+
+  const handleResizeEnd = useCallback(() => {
+    setIsDragging(false)
   }, [])
 
   return (
-    <div className="prompt-section">
+    <div
+      className={`prompt-section ${isDragging ? 'resizing' : ''}`}
+      onMouseMove={handleResizeMove}
+      onMouseUp={handleResizeEnd}
+      onMouseLeave={handleResizeEnd}
+    >
       <PromptInput
         value={prompt}
         onChange={setPrompt}
         minRows={Math.round(promptRows)}
-        maxRows={10}
+        maxRows={12}
         onSubmit={onSubmit}
         disabled={disabled}
       />
-      <ResizeHandle onResize={handleResize} />
+      <div className="resize-handle" onMouseDown={handleResizeStart}>
+        <span className="resize-dots">•••</span>
+      </div>
       {showNegative && (
         <PromptInput
           value={negativePrompt}

@@ -77,7 +77,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
         <sp-body size="S" className="form-field">
-          <FieldLabel for="comfy-url">ComfyUI Server</FieldLabel>
+          <FieldLabel size="s" for="comfy-url">ComfyUI Server</FieldLabel>
           <Textfield
             id="comfy-url"
             value={settings.comfyUrl}
@@ -93,7 +93,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </sp-body>
 
         <sp-body size="S" className="form-field">
-          <FieldLabel for="auth-token">Auth Token (optional)</FieldLabel>
+          <FieldLabel size="s" for="auth-token">Auth Token (optional)</FieldLabel>
           <Textfield
             id="auth-token"
             type="password"
@@ -120,10 +120,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       </div>
 
       <div className="modal-footer">
-        <Button variant="secondary" onClick={handleCancel}>
+        <Button size="s" variant="secondary" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button variant="cta" onClick={handleSave} disabled={testing}>
+        <Button size="s" variant="cta" onClick={handleSave} disabled={testing}>
           {testing ? 'Testing...' : 'Save'}
         </Button>
       </div>

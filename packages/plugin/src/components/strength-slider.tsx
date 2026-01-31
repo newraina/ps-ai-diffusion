@@ -27,10 +27,10 @@ export function StrengthSlider() {
         onChange={() => setStrength(strength === 100 ? 75 : 100)}
       />
       <span className="strength-display">Strength: {displayValue}</span>
-      <ActionButton quiet className="control-button" title="Add Control Layer">
+      <ActionButton size="s" quiet className="control-button" title="Add Control Layer">
         ⊞
       </ActionButton>
-      <ActionButton quiet className="region-button" title="Add Region">
+      <ActionButton size="s" quiet className="region-button" title="Add Region">
         ▣
       </ActionButton>
     </div>

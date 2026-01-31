@@ -22,9 +22,11 @@ void _updatePreviewLayer
 
 interface GeneratePanelProps {
   isConnected: boolean
+  onOpenSettings?: () => void
+  connectionStatus?: string
 }
 
-export function GeneratePanel({ isConnected }: GeneratePanelProps) {
+export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }: GeneratePanelProps) {
   const {
     prompt,
     negativePrompt,
@@ -93,7 +95,10 @@ export function GeneratePanel({ isConnected }: GeneratePanelProps) {
 
   return (
     <div className="generate-panel">
-      <StyleSelector />
+      <StyleSelector
+        onOpenSettings={onOpenSettings}
+        connectionStatus={connectionStatus}
+      />
       <PromptSection onSubmit={handleGenerate} disabled={isGenerating} />
       <StrengthSlider />
       <GenerateButton
