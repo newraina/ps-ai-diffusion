@@ -279,21 +279,26 @@ export function GeneratePanel({ isConnected }: GeneratePanelProps) {
 
   return (
     <div className="generate-panel">
-      <PromptInput
-        label="Prompt"
-        value={prompt}
-        onChange={setPrompt}
-        placeholder="Describe what you want to generate..."
-        disabled={isGenerating}
-      />
+      <div className="prompt-section">
+        <sp-body size="S">Prompt</sp-body>
+        <PromptInput
+          value={prompt}
+          onChange={setPrompt}
+          placeholder="Describe what you want to generate..."
+          disabled={isGenerating}
+        />
+      </div>
 
-      <PromptInput
-        label="Negative Prompt"
-        value={negativePrompt}
-        onChange={setNegativePrompt}
-        placeholder="What to avoid..."
-        disabled={isGenerating}
-      />
+      <div className="prompt-section">
+        <sp-body size="S">Negative Prompt</sp-body>
+        <PromptInput
+          value={negativePrompt}
+          onChange={setNegativePrompt}
+          placeholder="What to avoid..."
+          isNegative
+          disabled={isGenerating}
+        />
+      </div>
 
       <div className="batch-size-row">
         <sp-body size="S">Batch Size</sp-body>
