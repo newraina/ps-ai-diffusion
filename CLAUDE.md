@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AI-powered image generation plugin for Adobe Photoshop. Uses Stable Diffusion models via ComfyUI from within Photoshop and writes results to new layers.
 
 **Architecture:** Three independent components:
-- **UXP Plugin** (`packages/plugin/`) - React 19 + TypeScript UI running in Photoshop
+- **UXP Plugin** (`packages/plugin/`) - React 18 + TypeScript UI running in Photoshop
 - **Python Bridge** (`packages/bridge/`) - FastAPI REST API service (port 7860)
 - **Shared Modules** (`packages/shared/`) - Core modules reused from krita-ai-diffusion via git subtree
 

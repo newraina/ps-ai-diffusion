@@ -10,19 +10,19 @@ importers:
     dependencies:
       '@swc-react/action-button':
         specifier: 0.10.8-react.2993
-        version: 0.10.8-react.2993(react@19.2.4)
+        version: 0.10.8-react.2993(react@18.3.1)
       '@swc-react/button':
         specifier: 0.19.8-react.3029
-        version: 0.19.8-react.3029(react@19.2.4)
+        version: 0.19.8-react.3029(react@18.3.1)
       '@swc-react/field-label':
         specifier: 0.10.3-react.3029
-        version: 0.10.3-react.3029(react@19.2.4)
+        version: 0.10.3-react.3029(react@18.3.1)
       '@swc-react/textfield':
         specifier: 0.13.11-react.3163
-        version: 0.13.11-react.3163(react@19.2.4)
+        version: 0.13.11-react.3163(react@18.3.1)
       '@swc-react/theme':
         specifier: 0.14.8-react.2993
-        version: 0.14.8-react.2993(react@19.2.4)
+        version: 0.14.8-react.2993(react@18.3.1)
       '@swc-uxp-wrappers/action-button':
         specifier: 1.0.0
         version: 1.0.0
@@ -42,21 +42,21 @@ importers:
         specifier: 1.0.0
         version: 1.0.0
       react:
-        specifier: ^19.0.0
-        version: 19.2.4
+        specifier: ^18.3.1
+        version: 18.3.1
       react-dom:
-        specifier: ^19.0.0
-        version: 19.2.4(react@19.2.4)
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.3.13
         version: 2.3.13
       '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.10
+        specifier: ^18.3.0
+        version: 18.3.27
       '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.10)
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.27)
       '@vitejs/plugin-react':
         specifier: ^4.2.0
         version: 4.7.0(vite@5.4.21)
@@ -671,13 +671,16 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/react-dom@19.2.3':
-    resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
-    peerDependencies:
-      '@types/react': ^19.2.0
+  '@types/prop-types@15.7.15':
+    resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
 
-  '@types/react@19.2.10':
-    resolution: {integrity: sha512-WPigyYuGhgZ/cTPRXB2EwUw+XvsRA3GqHlsP4qteqrnnjDrApbS7MxcGr/hke5iUoeB7E/gQtrs9I37zAJ0Vjw==}
+  '@types/react-dom@18.3.7':
+    resolution: {integrity: sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==}
+    peerDependencies:
+      '@types/react': ^18.0.0
+
+  '@types/react@18.3.27':
+    resolution: {integrity: sha512-cisd7gxkzjBKU2GgdYrTdtQx1SORymWyaAFhaxQPK9bYO9ot3Y5OikQRvY0VYQtvwjeQnizCINJAenh/V7MK2w==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -761,6 +764,10 @@ packages:
   lit@2.8.0:
     resolution: {integrity: sha512-4Sc3OFX9QHOJaHbmTMk28SYgVxLN3ePDjg7hofEft2zWlehFL3LiAuapWc4U/kYwMYJSh2hTCPZ6/LIC7ii0MA==}
 
+  loose-envify@1.4.0:
+    resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
+    hasBin: true
+
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
@@ -782,17 +789,17 @@ packages:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  react-dom@19.2.4:
-    resolution: {integrity: sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ==}
+  react-dom@18.3.1:
+    resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}
     peerDependencies:
-      react: ^19.2.4
+      react: ^18.3.1
 
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
 
-  react@19.2.4:
-    resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
+  react@18.3.1:
+    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
     engines: {node: '>=0.10.0'}
 
   rollup@4.57.1:
@@ -800,8 +807,8 @@ packages:
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
-  scheduler@0.27.0:
-    resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
+  scheduler@0.23.2:
+    resolution: {integrity: sha512-UOShsPwz7NrMUqhR6t0hWjFduvOzbtv7toDH1/hIrfRNIDBnnBWd0CwJTGvTpngVlmwGCdP9/Zl/tVrDqcuYzQ==}
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -1403,35 +1410,35 @@ snapshots:
       '@spectrum-web-components/base': 0.7.5
       '@spectrum-web-components/styles': 0.23.3
 
-  '@swc-react/action-button@0.10.8-react.2993(react@19.2.4)':
+  '@swc-react/action-button@0.10.8-react.2993(react@18.3.1)':
     dependencies:
       '@lit-labs/react': 1.2.1
       '@spectrum-web-components/action-button': 0.10.16
-      react: 19.2.4
+      react: 18.3.1
 
-  '@swc-react/button@0.19.8-react.3029(react@19.2.4)':
+  '@swc-react/button@0.19.8-react.3029(react@18.3.1)':
     dependencies:
       '@lit-labs/react': 1.2.1
       '@spectrum-web-components/button': 0.19.8
-      react: 19.2.4
+      react: 18.3.1
 
-  '@swc-react/field-label@0.10.3-react.3029(react@19.2.4)':
+  '@swc-react/field-label@0.10.3-react.3029(react@18.3.1)':
     dependencies:
       '@lit-labs/react': 1.2.1
       '@spectrum-web-components/field-label': 0.10.10
-      react: 19.2.4
+      react: 18.3.1
 
-  '@swc-react/textfield@0.13.11-react.3163(react@19.2.4)':
+  '@swc-react/textfield@0.13.11-react.3163(react@18.3.1)':
     dependencies:
       '@lit-labs/react': 1.2.1
       '@spectrum-web-components/textfield': 0.13.15
-      react: 19.2.4
+      react: 18.3.1
 
-  '@swc-react/theme@0.14.8-react.2993(react@19.2.4)':
+  '@swc-react/theme@0.14.8-react.2993(react@18.3.1)':
     dependencies:
       '@lit-labs/react': 1.2.1
       '@spectrum-web-components/theme': 0.14.14
-      react: 19.2.4
+      react: 18.3.1
 
   '@swc-uxp-wrappers/action-button@1.0.0':
     dependencies:
@@ -1490,12 +1497,15 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/react-dom@19.2.3(@types/react@19.2.10)':
-    dependencies:
-      '@types/react': 19.2.10
+  '@types/prop-types@15.7.15': {}
 
-  '@types/react@19.2.10':
+  '@types/react-dom@18.3.7(@types/react@18.3.27)':
     dependencies:
+      '@types/react': 18.3.27
+
+  '@types/react@18.3.27':
+    dependencies:
+      '@types/prop-types': 15.7.15
       csstype: 3.2.3
 
   '@types/trusted-types@2.0.7': {}
@@ -1591,6 +1601,10 @@ snapshots:
       lit-element: 3.3.3
       lit-html: 2.8.0
 
+  loose-envify@1.4.0:
+    dependencies:
+      js-tokens: 4.0.0
+
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
@@ -1609,14 +1623,17 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  react-dom@19.2.4(react@19.2.4):
+  react-dom@18.3.1(react@18.3.1):
     dependencies:
-      react: 19.2.4
-      scheduler: 0.27.0
+      loose-envify: 1.4.0
+      react: 18.3.1
+      scheduler: 0.23.2
 
   react-refresh@0.17.0: {}
 
-  react@19.2.4: {}
+  react@18.3.1:
+    dependencies:
+      loose-envify: 1.4.0
 
   rollup@4.57.1:
     dependencies:
@@ -1649,7 +1666,9 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.57.1
       fsevents: 2.3.3
 
-  scheduler@0.27.0: {}
+  scheduler@0.23.2:
+    dependencies:
+      loose-envify: 1.4.0
 
   semver@6.3.1: {}
 

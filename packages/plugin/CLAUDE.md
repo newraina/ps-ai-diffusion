@@ -89,7 +89,7 @@ import { FieldLabel } from '@swc-react/field-label'
 
 1. **Do NOT use standard @swc-react packages**: Standard versions depend on Lit library APIs like `createTreeWalker` which UXP doesn't support
 2. **Version locking**: UXP 8.0 locks SWC components to version 0.37.0
-3. **React 19 compatibility**: @swc-react packages have peer dependency on React 17/18, but currently work with React 19
+3. **React version**: This project uses React 18, which matches the peer dependency of @swc-react packages
 
 ## References
 
