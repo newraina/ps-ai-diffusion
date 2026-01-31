@@ -112,66 +112,30 @@ button:disabled {
   text-align: center;
 }
 
-/* Settings Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+/* Settings Dialog */
+.settings-dialog {
+  background-color: transparent;
+  color: #e0e0e0;
+  border: none;
+  padding: 0;
+  width: 400px;
+  min-height: 200px;
 }
 
-.modal-content {
-  background-color: #2a2a2a;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 400px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid #444;
-}
-
-.modal-header h2 {
-  margin: 0;
+.modal-title {
+  margin: 0 0 16px 0;
   font-size: 16px;
 }
 
-.modal-close {
-  background: none;
-  border: none;
-  color: #999;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  width: auto;
-  line-height: 1;
-}
-
-.modal-close:hover {
-  color: #fff;
-}
-
 .modal-body {
-  padding: 16px;
+  padding: 0;
 }
 
 .modal-footer {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid #444;
+  padding: 12px 0 0 0;
 }
 
 .form-field {
