@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { PromptInput } from '../components/PromptInput'
-import { generate } from '../services/bridgeClient'
+import { PromptInput } from '../components/prompt-input'
+import { generate } from '../services/bridge-client'
 
 interface GeneratePanelProps {
   isConnected: boolean

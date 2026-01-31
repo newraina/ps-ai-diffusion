@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { GeneratePanel } from './panels/GeneratePanel'
+import { GeneratePanel } from './panels/generate-panel'
 import {
   type ConnectionStatus,
   connect,
   getConnection,
-} from './services/bridgeClient'
+} from './services/bridge-client'
 
 function App() {
   const [connection, setConnection] = useState<ConnectionStatus | null>(null)
