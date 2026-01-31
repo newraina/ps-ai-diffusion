@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '@swc-react/button'
 import { PromptInput } from '../components/prompt-input'
 import { generate } from '../services/bridge-client'
 
@@ -47,16 +48,15 @@ export function GeneratePanel({ isConnected }: GeneratePanelProps) {
         placeholder="What to avoid..."
       />
 
-      <button
-        type="button"
+      <Button
+        variant="accent"
         onClick={handleGenerate}
         disabled={!isConnected || generating || !prompt.trim()}
-        className="generate-button"
       >
         {generating ? 'Generating...' : 'Generate'}
-      </button>
+      </Button>
 
-      {jobId && <p className="job-id">Job: {jobId}</p>}
+      {jobId && <sp-body size="S" className="job-id">Job: {jobId}</sp-body>}
     </div>
   )
 }

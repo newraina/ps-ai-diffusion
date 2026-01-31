@@ -1,7 +1,9 @@
 {
   "name": "ps-ai-diffusion",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "version": "0.1.0",
   "private": true,
@@ -15,6 +17,17 @@
     "check": "biome check --write ."
   },
   "dependencies": {
+    "@swc-react/action-button": "0.10.8-react.2993",
+    "@swc-react/button": "0.19.8-react.3029",
+    "@swc-react/field-label": "0.10.3-react.3029",
+    "@swc-react/textfield": "0.13.11-react.3163",
+    "@swc-react/theme": "0.14.8-react.2993",
+    "@swc-uxp-wrappers/action-button": "1.0.0",
+    "@swc-uxp-wrappers/button": "1.0.0",
+    "@swc-uxp-wrappers/field-label": "1.0.0",
+    "@swc-uxp-wrappers/menu": "1.0.0",
+    "@swc-uxp-wrappers/textfield": "1.0.0",
+    "@swc-uxp-wrappers/utils": "1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

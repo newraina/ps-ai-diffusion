@@ -1,8 +1,12 @@
+import { Textfield } from '@swc-react/textfield'
+import { FieldLabel } from '@swc-react/field-label'
+
 interface PromptInputProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
   label: string
+  id?: string
 }
 
 export function PromptInput({
@@ -10,16 +14,21 @@ export function PromptInput({
   onChange,
   placeholder,
   label,
+  id,
 }: PromptInputProps) {
+  const inputId = id ?? `prompt-input-${label.toLowerCase().replace(/\s+/g, '-')}`
+
   return (
-    <label className="prompt-input">
-      <span>{label}</span>
-      <textarea
+    <div className="prompt-input">
+      <FieldLabel for={inputId}>{label}</FieldLabel>
+      <Textfield
+        id={inputId}
+        multiline
+        grows
         value={value}
-        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        rows={3}
+        onInput={(e) => onChange((e.target as HTMLInputElement).value)}
       />
-    </label>
+    </div>
   )
 }

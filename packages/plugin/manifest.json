@@ -5,9 +5,12 @@
   "main": "index.html",
   "host": {
     "app": "PS",
-    "minVersion": "24.0.0"
+    "minVersion": "24.4.0"
   },
   "manifestVersion": 5,
+  "featureFlags": {
+    "enableSWCSupport": true
+  },
   "entrypoints": [
     {
       "type": "panel",

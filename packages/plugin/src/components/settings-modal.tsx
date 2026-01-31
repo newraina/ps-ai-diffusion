@@ -1,5 +1,7 @@
-// packages/plugin/src/components/settings-modal.tsx
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@swc-react/button'
+import { Textfield } from '@swc-react/textfield'
+import { FieldLabel } from '@swc-react/field-label'
 import { type Settings, getSettings, saveSettings } from '../services/settings'
 import { testConnection } from '../services/bridge-client'
 
@@ -18,8 +20,6 @@ interface UXPDialog extends HTMLDialogElement {
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const dialogRef = useRef<UXPDialog>(null)
-  const comfyUrlRef = useRef<HTMLInputElement>(null)
-  const authTokenRef = useRef<HTMLInputElement>(null)
   const [settings, setSettings] = useState<Settings>(getSettings)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{
@@ -41,40 +41,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       })
     }
   }, [isOpen, onClose])
-
-  // Sync sp-textfield values via refs (web components don't work well with React controlled inputs)
-  useEffect(() => {
-    if (comfyUrlRef.current) {
-      comfyUrlRef.current.value = settings.comfyUrl
-    }
-    if (authTokenRef.current) {
-      authTokenRef.current.value = settings.authToken
-    }
-  }, [settings])
-
-  // Attach event listeners for sp-textfield inputs
-  useEffect(() => {
-    const comfyUrl = comfyUrlRef.current
-    const authToken = authTokenRef.current
-
-    function handleComfyUrlChange(e: Event) {
-      const target = e.target as HTMLInputElement
-      setSettings((prev) => ({ ...prev, comfyUrl: target.value }))
-    }
-
-    function handleAuthTokenChange(e: Event) {
-      const target = e.target as HTMLInputElement
-      setSettings((prev) => ({ ...prev, authToken: target.value }))
-    }
-
-    comfyUrl?.addEventListener('input', handleComfyUrlChange)
-    authToken?.addEventListener('input', handleAuthTokenChange)
-
-    return () => {
-      comfyUrl?.removeEventListener('input', handleComfyUrlChange)
-      authToken?.removeEventListener('input', handleAuthTokenChange)
-    }
-  }, [])
 
   async function handleSave() {
     setTesting(true)
@@ -111,24 +77,36 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
         <sp-body size="S" className="form-field">
-          <sp-textfield
-            ref={comfyUrlRef}
+          <FieldLabel for="comfy-url">ComfyUI Server</FieldLabel>
+          <Textfield
+            id="comfy-url"
+            value={settings.comfyUrl}
             placeholder="http://localhost:8188"
             style={{ width: '100%' }}
-          >
-            <sp-label slot="label">ComfyUI Server</sp-label>
-          </sp-textfield>
+            onInput={(e) =>
+              setSettings((prev) => ({
+                ...prev,
+                comfyUrl: (e.target as HTMLInputElement).value,
+              }))
+            }
+          />
         </sp-body>
 
         <sp-body size="S" className="form-field">
-          <sp-textfield
-            ref={authTokenRef}
+          <FieldLabel for="auth-token">Auth Token (optional)</FieldLabel>
+          <Textfield
+            id="auth-token"
             type="password"
+            value={settings.authToken}
             placeholder="Enter token if required"
             style={{ width: '100%' }}
-          >
-            <sp-label slot="label">Auth Token (optional)</sp-label>
-          </sp-textfield>
+            onInput={(e) =>
+              setSettings((prev) => ({
+                ...prev,
+                authToken: (e.target as HTMLInputElement).value,
+              }))
+            }
+          />
         </sp-body>
 
         {testResult && (
@@ -142,12 +120,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       </div>
 
       <div className="modal-footer">
-        <sp-button variant="secondary" onClick={handleCancel}>
+        <Button variant="secondary" onClick={handleCancel}>
           Cancel
-        </sp-button>
-        <sp-button variant="cta" onClick={handleSave} disabled={testing || undefined}>
+        </Button>
+        <Button variant="cta" onClick={handleSave} disabled={testing}>
           {testing ? 'Testing...' : 'Save'}
-        </sp-button>
+        </Button>
       </div>
     </dialog>
   )

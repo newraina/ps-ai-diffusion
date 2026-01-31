@@ -27,12 +27,15 @@ declare module 'react' {
           quiet?: boolean
           valid?: boolean
           invalid?: boolean
+          multiline?: boolean
+          grows?: boolean
+          rows?: number
         },
         HTMLInputElement
       >
       'sp-button': React.DetailedHTMLProps<
         React.ButtonHTMLAttributes<HTMLButtonElement> & {
-          variant?: 'cta' | 'primary' | 'secondary' | 'negative'
+          variant?: 'accent' | 'cta' | 'primary' | 'secondary' | 'negative'
           quiet?: boolean
         },
         HTMLButtonElement
@@ -109,6 +112,15 @@ declare module 'react' {
           quiet?: boolean
         },
         HTMLTextAreaElement
+      >
+      'sp-field-label': React.DetailedHTMLProps<
+        React.LabelHTMLAttributes<HTMLLabelElement> & {
+          for?: string
+          required?: boolean
+          'side-aligned'?: 'start' | 'end'
+          size?: 's' | 'm' | 'l' | 'xl'
+        },
+        HTMLLabelElement
       >
     }
   }

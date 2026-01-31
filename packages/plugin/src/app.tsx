@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@swc-react/button'
+import { ActionButton } from '@swc-react/action-button'
 import { GeneratePanel } from './panels/generate-panel'
 import {
   type ConnectionStatus,
@@ -50,28 +52,27 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>AI Diffusion</h1>
+        <sp-heading size="M">AI Diffusion</sp-heading>
         <div className="header-actions">
-          <button
-            type="button"
-            className="icon-button"
+          <ActionButton
+            quiet
             onClick={() => setSettingsOpen(true)}
             title="Settings"
           >
             ⚙
-          </button>
+          </ActionButton>
           <span className={`status-dot ${connection?.status ?? 'unknown'}`} />
         </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      {error && <sp-body size="S" className="error">{error}</sp-body>}
 
       {!isConnected ? (
         <div className="connection-section">
-          <p>Status: {connection?.status ?? 'unknown'}</p>
-          <button type="button" onClick={handleConnect} disabled={loading}>
+          <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
+          <Button variant="primary" onClick={handleConnect} disabled={loading}>
             {loading ? 'Connecting...' : 'Connect to ComfyUI'}
-          </button>
+          </Button>
         </div>
       ) : (
         <GeneratePanel isConnected={isConnected} />
