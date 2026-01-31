@@ -1,9 +1,6 @@
-import sys
-from pathlib import Path
-
-# Add shared modules to path
-shared_path = Path(__file__).parent.parent.parent / "shared"
-sys.path.insert(0, str(shared_path.parent))
+"""Generator module for creating AI workflows."""
+# Setup path first - this sets up shared package without Krita checks
+import src.path_setup  # noqa: F401
 
 from shared.image import Extent
 from shared.api import WorkflowInput, WorkflowKind, ImageInput, ExtentInput
