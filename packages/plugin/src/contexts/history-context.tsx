@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import type { HistoryGroup } from '../types'
 import { mockHistory, placeholderThumbnail } from '../services/mock-data'
+import { updatePreviewLayer, applyAsLayer, deletePreviewLayer } from '../services/photoshop-layer'
 
 interface HistoryContextValue {
   groups: HistoryGroup[]
@@ -32,16 +33,37 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
 
   const selectImage = useCallback((jobId: string, index: number) => {
     setSelectedId(`${jobId}-${index}`)
+    // Show preview layer
+    setGroups(currentGroups => {
+      const group = currentGroups.find(g => g.job_id === jobId)
+      if (group) {
+        const image = group.images[index]
+        if (image) {
+          updatePreviewLayer(image.thumbnail, group.prompt)
+        }
+      }
+      return currentGroups
+    })
   }, [])
 
   const clearSelection = useCallback(() => {
     setSelectedId(null)
+    // Remove preview layer
+    deletePreviewLayer()
   }, [])
 
   const applyImage = useCallback(async (jobId: string, index: number) => {
-    // Mark as applied
-    setGroups(prev =>
-      prev.map(g =>
+    // Find the group and image
+    let group: HistoryGroup | undefined
+    let imageData: { thumbnail: string; seed: number } | undefined
+
+    setGroups(prev => {
+      group = prev.find(g => g.job_id === jobId)
+      if (group) {
+        imageData = group.images[index]
+      }
+      // Mark as applied
+      return prev.map(g =>
         g.job_id === jobId
           ? {
               ...g,
@@ -51,8 +73,14 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
             }
           : g
       )
-    )
-    // TODO: Call actual apply logic
+    })
+
+    // Apply to Photoshop layer
+    if (group && imageData) {
+      await applyAsLayer(imageData.thumbnail, group.prompt, imageData.seed)
+      // Remove preview layer after applying
+      await deletePreviewLayer()
+    }
   }, [])
 
   const discardImage = useCallback((jobId: string, index: number) => {

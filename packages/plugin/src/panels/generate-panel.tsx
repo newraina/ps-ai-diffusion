@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { StyleSelector } from '../components/style-selector'
 import { PromptSection } from '../components/prompt-section'
 import { StrengthSlider } from '../components/strength-slider'
@@ -9,16 +9,12 @@ import { useGeneration } from '../contexts/generation-context'
 import { useHistory } from '../contexts/history-context'
 import {
   generate,
-  cancelJob as _cancelJob,
+  getJobStatus,
+  getJobImages,
+  cancelJob,
 } from '../services/bridge-client'
-import {
-  hasActiveDocument,
-  updatePreviewLayer as _updatePreviewLayer,
-} from '../services/photoshop-layer'
-
-// Reserved for future use
-void _cancelJob
-void _updatePreviewLayer
+import { hasActiveDocument } from '../services/photoshop-layer'
+import type { HistoryGroup, HistoryImage } from '../types'
 
 interface GeneratePanelProps {
   isConnected: boolean
@@ -26,28 +22,38 @@ interface GeneratePanelProps {
   connectionStatus?: string
 }
 
+const POLL_INTERVAL = 500 // ms
+
 export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }: GeneratePanelProps) {
   const {
     prompt,
     negativePrompt,
-    strength: _strength,
+    strength,
     batchSize,
+    style,
     isGenerating,
     setIsGenerating,
     setProgress,
   } = useGeneration()
 
-  const { addGenerationResult: _addGenerationResult } = useHistory()
+  const { addGenerationResult } = useHistory()
 
-  // Reserved for future use
-  void _strength
-  void _addGenerationResult
+  // Track current job for cancellation
+  const currentJobRef = useRef<string | null>(null)
+  const cancelledRef = useRef(false)
 
   const handleGenerate = useCallback(async () => {
-    if (isGenerating) {
-      // Cancel logic
+    // Handle cancel
+    if (isGenerating && currentJobRef.current) {
+      cancelledRef.current = true
+      try {
+        await cancelJob(currentJobRef.current)
+      } catch (error) {
+        console.error('Failed to cancel job:', error)
+      }
       setIsGenerating(false)
       setProgress(0)
+      currentJobRef.current = null
       return
     }
 
@@ -59,10 +65,11 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
 
     setIsGenerating(true)
     setProgress(0, 'Submitting...')
+    cancelledRef.current = false
 
     try {
-      // TODO: Use response.job_id to poll job status
-      await generate({
+      // Submit generation job
+      const response = await generate({
         prompt,
         negative_prompt: negativePrompt,
         width: 512,
@@ -70,27 +77,93 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         batch_size: batchSize,
       })
 
-      // TODO: Poll job status and update progress
-      // For now, simulate completion
-      setProgress(1, 'Done!')
+      const jobId = response.job_id
+      currentJobRef.current = jobId
 
+      // Poll for job status
+      let finished = false
+      while (!finished && !cancelledRef.current) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+
+        if (cancelledRef.current) break
+
+        const status = await getJobStatus(jobId)
+
+        switch (status.status) {
+          case 'queued':
+            setProgress(0, 'Queued...')
+            break
+          case 'executing':
+            setProgress(status.progress, `Generating... ${Math.round(status.progress * 100)}%`)
+            break
+          case 'finished':
+            finished = true
+            setProgress(1, 'Fetching images...')
+            break
+          case 'error':
+            throw new Error(status.error || 'Generation failed')
+          case 'interrupted':
+            // User cancelled
+            finished = true
+            break
+        }
+      }
+
+      if (cancelledRef.current) {
+        return
+      }
+
+      // Fetch generated images
+      const imagesResponse = await getJobImages(jobId)
+
+      if (imagesResponse.images.length === 0) {
+        throw new Error('No images generated')
+      }
+
+      // Add all images to history (user will select/apply from there)
+      const historyImages: HistoryImage[] = imagesResponse.images.map((img, i) => ({
+        index: i,
+        thumbnail: `data:image/png;base64,${img}`, // Add data URL prefix for img src
+        applied: false, // Not applied until user clicks Apply
+        seed: imagesResponse.seeds[i],
+      }))
+
+      const historyGroup: HistoryGroup = {
+        job_id: jobId,
+        timestamp: new Date().toISOString(),
+        prompt,
+        negative_prompt: negativePrompt,
+        strength,
+        style_id: style?.id ?? '',
+        images: historyImages,
+      }
+
+      addGenerationResult(historyGroup)
+
+      setProgress(1, 'Done!')
       setTimeout(() => {
         setIsGenerating(false)
         setProgress(0)
+        currentJobRef.current = null
       }, 1000)
 
     } catch (error) {
       console.error('Generation failed:', error)
       setIsGenerating(false)
       setProgress(0)
+      currentJobRef.current = null
+      alert(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }, [
     prompt,
     negativePrompt,
+    strength,
     batchSize,
+    style,
     isGenerating,
     setIsGenerating,
     setProgress,
+    addGenerationResult,
   ])
 
   return (

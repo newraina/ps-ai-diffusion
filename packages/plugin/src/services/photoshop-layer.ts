@@ -89,9 +89,12 @@ const { storage } = uxp
 
 /**
  * Convert base64 PNG to ArrayBuffer.
+ * Handles both raw base64 and data URL format (data:image/png;base64,...).
  */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64)
+  // Strip data URL prefix if present
+  const base64Data = base64.includes(',') ? base64.split(',')[1] : base64
+  const binaryString = atob(base64Data)
   const bytes = new Uint8Array(binaryString.length)
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i)
