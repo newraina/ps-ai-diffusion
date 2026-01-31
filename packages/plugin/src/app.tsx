@@ -5,11 +5,14 @@ import {
   connect,
   getConnection,
 } from './services/bridge-client'
+import { getSettings } from './services/settings'
+import { SettingsModal } from './components/settings-modal'
 
 function App() {
   const [connection, setConnection] = useState<ConnectionStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const isConnected = connection?.status === 'connected'
 
@@ -29,7 +32,12 @@ function App() {
   async function handleConnect() {
     setLoading(true)
     try {
-      const status = await connect('local')
+      const settings = getSettings()
+      const status = await connect(
+        'local',
+        settings.comfyUrl,
+        settings.authToken || undefined,
+      )
       setConnection(status)
       setError(null)
     } catch {
@@ -43,7 +51,17 @@ function App() {
     <div className="app">
       <header>
         <h1>AI Diffusion</h1>
-        <span className={`status-dot ${connection?.status ?? 'unknown'}`} />
+        <div className="header-actions">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+          >
+            ⚙
+          </button>
+          <span className={`status-dot ${connection?.status ?? 'unknown'}`} />
+        </div>
       </header>
 
       {error && <p className="error">{error}</p>}
@@ -58,6 +76,11 @@ function App() {
       ) : (
         <GeneratePanel isConnected={isConnected} />
       )}
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   )
 }
