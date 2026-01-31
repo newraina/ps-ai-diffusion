@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@swc-react/button'
-import { Textfield } from '@swc-react/textfield'
-import { FieldLabel } from '@swc-react/field-label'
 import { type Settings, getSettings, saveSettings } from '../services/settings'
 import { testConnection } from '../services/bridge-client'
 
@@ -76,38 +74,39 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
-        <sp-body size="S" className="form-field">
-          <FieldLabel size="s" for="comfy-url">ComfyUI Server</FieldLabel>
-          <Textfield
+        <div className="form-field">
+          <label htmlFor="comfy-url">ComfyUI Server</label>
+          <input
             id="comfy-url"
+            type="text"
+            className="text-input"
             value={settings.comfyUrl}
             placeholder="http://localhost:8188"
-            style={{ width: '100%' }}
-            onInput={(e) =>
+            onChange={(e) =>
               setSettings((prev) => ({
                 ...prev,
-                comfyUrl: (e.target as HTMLInputElement).value,
+                comfyUrl: e.target.value,
               }))
             }
           />
-        </sp-body>
+        </div>
 
-        <sp-body size="S" className="form-field">
-          <FieldLabel size="s" for="auth-token">Auth Token (optional)</FieldLabel>
-          <Textfield
+        <div className="form-field">
+          <label htmlFor="auth-token">Auth Token (optional)</label>
+          <input
             id="auth-token"
             type="password"
+            className="text-input"
             value={settings.authToken}
             placeholder="Enter token if required"
-            style={{ width: '100%' }}
-            onInput={(e) =>
+            onChange={(e) =>
               setSettings((prev) => ({
                 ...prev,
-                authToken: (e.target as HTMLInputElement).value,
+                authToken: e.target.value,
               }))
             }
           />
-        </sp-body>
+        </div>
 
         {testResult && (
           <sp-body
