@@ -73,7 +73,10 @@ button:disabled {
 .generate-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+}
+
+.generate-panel > * + * {
+  margin-top: 16px;
 }
 
 .generate-panel > sp-button {
@@ -83,7 +86,10 @@ button:disabled {
 .prompt-input {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+
+.prompt-input > * + * {
+  margin-top: 4px;
 }
 
 .prompt-input sp-body {
@@ -105,7 +111,6 @@ button:disabled {
   border-radius: 4px;
   color: #e0e0e0;
   padding: 8px;
-  resize: vertical;
   font-family: inherit;
 }
 
@@ -143,9 +148,12 @@ button:disabled {
 
 .modal-footer {
   display: flex;
-  gap: 8px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.modal-footer > * + * {
+  margin-left: 8px;
 }
 
 .test-result {
@@ -166,7 +174,10 @@ button:disabled {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+}
+
+.header-actions > * + * {
+  margin-left: 8px;
 }
 
 .icon-button {

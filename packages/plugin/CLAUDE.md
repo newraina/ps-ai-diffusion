@@ -91,6 +91,50 @@ import { FieldLabel } from '@swc-react/field-label'
 2. **Version locking**: UXP 8.0 locks SWC components to version 0.37.0
 3. **React version**: This project uses React 18, which matches the peer dependency of @swc-react packages
 
+## CSS Limitations in UXP
+
+UXP uses a limited CSS engine. Avoid these unsupported features:
+
+### Not Supported
+| Category | Unsupported Features |
+|----------|---------------------|
+| Layout | `gap` (use `margin` instead), `position: sticky`, `aspect-ratio` |
+| Selectors | `:has()`, `:is()`, `:where()`, `:focus-visible` |
+| Visual Effects | `backdrop-filter`, `mix-blend-mode`, `mask`, `clip-path` |
+| Text | `-webkit-line-clamp`, `text-decoration-style` |
+| Functions | `clamp()`, `min()`, `max()` |
+| At-rules | `@supports`, `@container` |
+| Other | `resize`, `scroll-behavior: smooth` |
+
+### Best Practices
+
+```css
+/* ❌ Don't use gap */
+.container {
+  display: flex;
+  gap: 16px;
+}
+
+/* ✅ Use margin instead */
+.container {
+  display: flex;
+}
+.container > * + * {
+  margin-left: 16px;  /* horizontal */
+  /* or margin-top: 16px; for vertical */
+}
+```
+
+### Supported Features
+- Flexbox (without `gap`)
+- `border-radius`, `box-shadow`
+- `rgba()`, `opacity`
+- CSS variables (`--var`)
+- `:hover`, `:focus`, `:disabled`
+- `overflow`, `overflow-y: auto`
+
+Reference: https://developer.adobe.com/photoshop/uxp/2022/uxp-api/reference-css/
+
 ## References
 
 - [Spectrum Web Components](https://opensource.adobe.com/spectrum-web-components/)
