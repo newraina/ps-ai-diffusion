@@ -48,6 +48,7 @@ export function GeneratePanel({ isConnected }: GeneratePanelProps) {
       />
 
       <button
+        type="button"
         onClick={handleGenerate}
         disabled={!isConnected || generating || !prompt.trim()}
         className="generate-button"

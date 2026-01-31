@@ -5,16 +5,21 @@ interface PromptInputProps {
   label: string
 }
 
-export function PromptInput({ value, onChange, placeholder, label }: PromptInputProps) {
+export function PromptInput({
+  value,
+  onChange,
+  placeholder,
+  label,
+}: PromptInputProps) {
   return (
-    <div className="prompt-input">
-      <label>{label}</label>
+    <label className="prompt-input">
+      <span>{label}</span>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
       />
-    </div>
+    </label>
   )
 }

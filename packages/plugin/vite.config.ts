@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
@@ -14,8 +14,8 @@ export default defineConfig({
         entryFileNames: 'index.js',
         chunkFileNames: '[name].js',
         assetFileNames: '[name].[ext]',
-        inlineDynamicImports: true
-      }
-    }
-  }
+        inlineDynamicImports: true,
+      },
+    },
+  },
 })

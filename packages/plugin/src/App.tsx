@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react'
-import { getConnection, connect, ConnectionStatus } from './services/bridgeClient'
+import { useEffect, useState } from 'react'
 import { GeneratePanel } from './panels/GeneratePanel'
+import {
+  type ConnectionStatus,
+  connect,
+  getConnection,
+} from './services/bridgeClient'
 
 function App() {
   const [connection, setConnection] = useState<ConnectionStatus | null>(null)
@@ -10,18 +14,17 @@ function App() {
   const isConnected = connection?.status === 'connected'
 
   useEffect(() => {
+    async function checkConnection() {
+      try {
+        const status = await getConnection()
+        setConnection(status)
+        setError(null)
+      } catch {
+        setError('Bridge not running. Start the Python Bridge service.')
+      }
+    }
     checkConnection()
   }, [])
-
-  async function checkConnection() {
-    try {
-      const status = await getConnection()
-      setConnection(status)
-      setError(null)
-    } catch {
-      setError('Bridge not running. Start the Python Bridge service.')
-    }
-  }
 
   async function handleConnect() {
     setLoading(true)
@@ -48,7 +51,7 @@ function App() {
       {!isConnected ? (
         <div className="connection-section">
           <p>Status: {connection?.status ?? 'unknown'}</p>
-          <button onClick={handleConnect} disabled={loading}>
+          <button type="button" onClick={handleConnect} disabled={loading}>
             {loading ? 'Connecting...' : 'Connect to ComfyUI'}
           </button>
         </div>

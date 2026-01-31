@@ -36,7 +36,7 @@ export async function getConnection(): Promise<ConnectionStatus> {
 
 export async function connect(
   backend: 'local' | 'cloud' = 'local',
-  comfyUrl: string = 'http://localhost:8188'
+  comfyUrl: string = 'http://localhost:8188',
 ): Promise<ConnectionStatus> {
   const response = await fetch(`${BRIDGE_URL}/api/connection`, {
     method: 'POST',
@@ -46,7 +46,9 @@ export async function connect(
   return response.json()
 }
 
-export async function generate(request: GenerateRequest): Promise<GenerateResponse> {
+export async function generate(
+  request: GenerateRequest,
+): Promise<GenerateResponse> {
   const response = await fetch(`${BRIDGE_URL}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
