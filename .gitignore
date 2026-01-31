@@ -21,3 +21,6 @@ packages/plugin/dist/
 
 # AI
 .claude/*.local.json
+
+# Private notes
+.notes/
