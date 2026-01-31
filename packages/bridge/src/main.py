@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
@@ -7,10 +8,20 @@ from src.models import GenerateRequest, GenerateResponse
 
 app = FastAPI(title="PS AI Bridge", version="0.1.0")
 
+DEFAULT_COMFY_URL = "http://localhost:8188"
+
+
+def get_comfy_url(request_url: Optional[str]) -> str:
+    """Get ComfyUI URL with fallback to env var and default."""
+    if request_url:
+        return request_url
+    return os.getenv("COMFY_URL", DEFAULT_COMFY_URL)
+
 
 class ConnectionRequest(BaseModel):
     backend: str = "local"
-    comfy_url: Optional[str] = "http://localhost:8188"
+    comfy_url: Optional[str] = None
+    auth_token: Optional[str] = None
 
 
 @app.get("/api/health")
@@ -32,7 +43,8 @@ async def get_connection():
 async def post_connection(request: ConnectionRequest):
     if request.backend == "local":
         state.backend_type = BackendType.local
-        await connect_to_comfy(request.comfy_url)
+        url = get_comfy_url(request.comfy_url)
+        await connect_to_comfy(url, request.auth_token)
     else:
         state.backend_type = BackendType.cloud
         # Cloud connection to be implemented later
