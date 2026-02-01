@@ -10,6 +10,7 @@ from typing import Optional
 
 from .state import state, ConnectionStatus, BackendType
 from .comfy_client_manager import get_manager, JobStatus
+from .styles import load_styles, get_style_summary
 
 
 DEFAULT_COMFY_URL = "http://localhost:8188"
@@ -224,3 +225,14 @@ async def handle_cancel_job(job_id: str) -> ApiResponse:
     success = await manager.cancel(job_id)
 
     return ApiResponse(data={"job_id": job_id, "cancelled": success})
+
+
+async def handle_get_styles() -> ApiResponse:
+    """Handle get styles request.
+
+    Returns:
+        ApiResponse with list of available styles.
+    """
+    styles = load_styles()
+    summaries = [get_style_summary(s) for s in styles]
+    return ApiResponse(data={"styles": summaries})
