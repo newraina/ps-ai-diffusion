@@ -53,6 +53,12 @@ export interface GenerateRequest {
   model?: string
 }
 
+export interface UpscaleRequest {
+  image: string // Base64 encoded PNG
+  factor: number
+  model?: string
+}
+
 export interface GenerateResponse {
   job_id: string
   status: string
@@ -170,6 +176,19 @@ export async function getStyles(): Promise<StylesResponse> {
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || error.error || 'Failed to get styles')
+  }
+  return response.json()
+}
+
+export async function upscale(request: UpscaleRequest): Promise<GenerateResponse> {
+  const response = await fetch(getApiUrl('/upscale'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Upscale failed')
   }
   return response.json()
 }
