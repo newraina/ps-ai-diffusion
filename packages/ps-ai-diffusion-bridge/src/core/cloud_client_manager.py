@@ -248,6 +248,9 @@ class CloudClientManager:
         if not self._is_connected:
             raise RuntimeError("Not connected to cloud service")
 
+        # Apply cloud service limits (same as krita-ai-diffusion)
+        _apply_limits(work, self._features)
+
         job_id = str(uuid.uuid4())
         self._jobs[job_id] = CloudJobState(status=CloudJobStatus.queued)
 
@@ -258,12 +261,19 @@ class CloudClientManager:
 
     async def _process_job(self, job_id: str, work: WorkflowInput):
         """Process a job through send -> generate -> receive stages."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         job = self._jobs[job_id]
 
         try:
             # Stage 1: Send (prepare and upload inputs)
             job.status = CloudJobStatus.uploading
             input_data = work.to_dict(max_image_size=16 * 1024)
+            logger.info(f"[Cloud] Workflow input_data keys: {input_data.keys()}")
+            logger.info(f"[Cloud] Workflow kind: {input_data.get('kind')}")
+            logger.info(f"[Cloud] Workflow models: {input_data.get('models')}")
+            logger.info(f"[Cloud] Workflow sampling: {input_data.get('sampling')}")
             await self._send_images(input_data)
 
             # Stage 2: Generate (submit and poll)
@@ -276,7 +286,13 @@ class CloudClientManager:
                 }
             }
 
+            logger.info(f"[Cloud] Submitting generate request...")
             response = await self._post("generate", data)
+            logger.info(f"[Cloud] Generate response keys: {response.keys()}")
+            logger.info(f"[Cloud] Generate response id: {response.get('id')}")
+            logger.info(f"[Cloud] Generate response worker_id: {response.get('worker_id')}")
+            logger.info(f"[Cloud] Generate response status: {response.get('status')}")
+            logger.info(f"[Cloud] Generate response full: {response}")
             remote_id = response["id"]
             worker_id = response.get("worker_id")
 
@@ -291,9 +307,11 @@ class CloudClientManager:
 
             # Poll for completion
             status = response.get("status", "").lower()
+            logger.info(f"[Cloud] Initial status: {status}")
             while status in ("in_queue", "in_progress"):
                 response = await self._post(f"status/{remote_id}", {})
                 status = response.get("status", "").lower()
+                logger.info(f"[Cloud] Poll status: {status}, response: {response}")
 
                 if status == "in_queue":
                     job.status = CloudJobStatus.in_queue
@@ -326,6 +344,7 @@ class CloudClientManager:
                 job.error = "Generation took too long and was cancelled (timeout)"
 
         except NetworkError as e:
+            logger.error(f"[Cloud] NetworkError: status={e.status}, message={e.message}")
             job.status = CloudJobStatus.error
             if e.status == 402:
                 job.error = "Insufficient credits. Please purchase more tokens."
@@ -333,6 +352,7 @@ class CloudClientManager:
                 job.error = e.message
 
         except Exception as e:
+            logger.exception(f"[Cloud] Unexpected error: {e}")
             job.status = CloudJobStatus.error
             job.error = str(e)
 
@@ -404,6 +424,19 @@ class CloudClientManager:
         if job and job.status == CloudJobStatus.finished:
             return job.images
         return []
+
+
+def _apply_limits(work: WorkflowInput, features: CloudFeatures):
+    """Apply cloud service limits to workflow (same as krita-ai-diffusion)."""
+    if work.models:
+        work.models.self_attention_guidance = False
+    if work.conditioning:
+        max_control = features.max_control_layers if features else 4
+        work.conditioning.control = work.conditioning.control[:max_control]
+        for region in work.conditioning.regions:
+            region.control = region.control[:max_control]
+    if work.sampling:
+        work.sampling.total_steps = min(work.sampling.total_steps, 1000)
 
 
 # Global instance

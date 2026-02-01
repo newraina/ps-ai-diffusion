@@ -153,6 +153,12 @@ async def handle_auth_validate(token: str) -> ApiResponse:
 async def handle_get_connection() -> ApiResponse:
     """Handle get connection status request."""
     if state.backend_type == BackendType.cloud:
+        # Get cloud models list
+        cloud_models = cloud_manager.models
+        checkpoints = []
+        if isinstance(cloud_models, dict) and "checkpoints" in cloud_models:
+            checkpoints = list(cloud_models["checkpoints"].keys())
+
         return ApiResponse(data={
             "status": state.connection_status.value,
             "backend": state.backend_type.value,
@@ -160,6 +166,7 @@ async def handle_get_connection() -> ApiResponse:
             "error": state.error_message,
             "connected": cloud_manager.is_connected,
             "user": asdict(state.cloud_user) if state.cloud_user else None,
+            "models": checkpoints,
         })
     else:
         manager = get_manager()
@@ -310,8 +317,8 @@ def _build_workflow_input(params: GenerateParams):
         SamplingInput,
         ConditioningInput,
         CheckpointInput,
-        TextPrompt,
     )
+    from shared.image import Extent
 
     # Determine workflow kind
     if params.image and params.strength < 1.0:
@@ -321,37 +328,43 @@ def _build_workflow_input(params: GenerateParams):
 
     # Build conditioning
     conditioning = ConditioningInput(
-        positive=TextPrompt(params.prompt),
-        negative=TextPrompt(params.negative_prompt),
+        positive=params.prompt,
+        negative=params.negative_prompt,
     )
 
     # Build sampling
+    import random
+    seed = params.seed if params.seed >= 0 else random.randint(0, 2**31 - 1)
     sampling = SamplingInput(
         sampler=params.sampler,
         scheduler=params.scheduler,
         cfg_scale=params.cfg_scale,
         total_steps=params.steps,
         start_step=0 if params.strength >= 1.0 else int(params.steps * (1 - params.strength)),
-        seed=params.seed if params.seed >= 0 else None,
+        seed=seed,
     )
 
     # Build models
     models = CheckpointInput(checkpoint=params.model) if params.model else None
 
     # Build extent
-    extent = ExtentInput(
-        initial=ExtentInput.Size(params.width, params.height),
-        desired=ExtentInput.Size(params.width, params.height),
-        target=ExtentInput.Size(params.width, params.height),
+    extent = Extent(params.width, params.height)
+    extent_input = ExtentInput(
+        input=extent,
+        initial=extent,
+        desired=extent,
+        target=extent,
     )
 
     # Build image input if provided
-    image = None
+    images = ImageInput(extent=extent_input)
     if params.image:
+        from shared.image import Image
         image_bytes = base64.b64decode(params.image)
-        image = ImageInput(
-            initial_image=image_bytes,
-            extent=extent,
+        initial_image = Image.from_bytes(image_bytes)
+        images = ImageInput(
+            extent=extent_input,
+            initial_image=initial_image,
         )
 
     return WorkflowInput(
@@ -360,7 +373,7 @@ def _build_workflow_input(params: GenerateParams):
         sampling=sampling,
         models=models,
         batch_count=params.batch_size,
-        images=image,
+        images=images,
     )
 
 
@@ -540,9 +553,35 @@ async def handle_get_styles() -> ApiResponse:
     Returns:
         ApiResponse with list of available styles.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     styles = load_styles()
-    summaries = [get_style_summary(s) for s in styles]
-    return ApiResponse(data={"styles": summaries})
+
+    # For cloud backend, filter checkpoints to only include cloud-supported models
+    if state.backend_type == BackendType.cloud:
+        cloud_models = cloud_manager.models
+        cloud_checkpoints = set()
+        if isinstance(cloud_models, dict) and "checkpoints" in cloud_models:
+            cloud_checkpoints = set(cloud_models["checkpoints"].keys())
+
+        logger.info(f"[Cloud] Available checkpoints: {list(cloud_checkpoints)[:10]}...")
+
+        filtered_styles = []
+        for style in styles:
+            summary = get_style_summary(style)
+            # Filter checkpoints to only include cloud-supported ones
+            original_checkpoints = summary.get("checkpoints", [])
+            filtered_checkpoints = [cp for cp in original_checkpoints if cp in cloud_checkpoints]
+            logger.info(f"[Cloud] Style '{summary['name']}': {original_checkpoints} -> {filtered_checkpoints}")
+            # Only include style if it has at least one supported checkpoint
+            if filtered_checkpoints:
+                summary["checkpoints"] = filtered_checkpoints
+                filtered_styles.append(summary)
+        return ApiResponse(data={"styles": filtered_styles})
+    else:
+        summaries = [get_style_summary(s) for s in styles]
+        return ApiResponse(data={"styles": summaries})
 
 
 async def handle_upscale(params: UpscaleParams) -> ApiResponse:
