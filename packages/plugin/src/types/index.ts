@@ -62,8 +62,19 @@ export interface HistoryGroup {
   images: HistoryImage[]
 }
 
+// LoRA types
+export interface LoraItem {
+  id: string
+  name: string
+  strength: number
+}
+
 // Control Layer types
 export type ControlMode = 
+  | 'reference'
+  | 'style'
+  | 'composition'
+  | 'face'
   | 'canny'
   | 'depth'
   | 'pose'
@@ -80,17 +91,31 @@ export interface ControlLayer {
   layerName: string
   image: string | null // base64
   strength: number
+  rangeStart: number // 0.0-1.0
+  rangeEnd: number // 0.0-1.0
   isEnabled: boolean
   isPreprocessor: boolean
 }
 
 // Region types
+export type RegionMaskSource = 'selection' | 'layer'
+
+export interface RegionBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface Region {
   id: string
   name: string
   prompt: string
   negativePrompt: string
   layerId: number | null // Linked Photoshop layer ID
+  maskSource: RegionMaskSource
+  maskBase64: string | null // base64 PNG (black/white)
+  bounds: RegionBounds | null // bounds in document coordinates
   isVisible: boolean
 }
 
@@ -112,6 +137,7 @@ export interface GenerationSnapshot {
   sampler: string
   scheduler: string
   useStyleDefaults: boolean
+  loras: LoraItem[]
   controlLayers: ControlLayer[]
   regions: Region[]
 }
@@ -145,6 +171,7 @@ export interface GenerationState {
   sampler: string
   scheduler: string
   useStyleDefaults: boolean
+  loras: LoraItem[]
   controlLayers: ControlLayer[]
   regions: Region[]
   queue: QueueItem[]

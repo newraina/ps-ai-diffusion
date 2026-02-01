@@ -589,6 +589,54 @@ class ComfyClientManager:
 
         return await self.enqueue_workflow(work, batch_size=1, seed=0)
 
+    async def enqueue_raw_prompt(self, prompt: dict) -> str:
+        """Submit a raw ComfyUI prompt graph (custom workflow).
+
+        Notes:
+            - This bypasses shared WorkflowInput serialization.
+            - Use this for executing user-supplied custom graphs.
+        """
+        if not self._session or not self._is_connected:
+            raise Exception("Not connected to ComfyUI")
+
+        import uuid
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        job_id = str(uuid.uuid4())
+        data = {
+            "prompt": prompt,
+            "client_id": self.client_id,
+            "prompt_id": job_id,
+        }
+
+        async with self._session.post(
+            f"{self.url}/prompt",
+            json=data,
+            timeout=30,
+        ) as resp:
+            if resp.status != 200:
+                error_text = await resp.text()
+                raise Exception(f"Failed to submit custom workflow: {error_text}")
+            result = await resp.json()
+            if result.get("prompt_id") != job_id:
+                logger.warning(
+                    "Prompt ID mismatch: expected %s, got %s",
+                    job_id,
+                    result.get("prompt_id"),
+                )
+            # Minimal job state tracking; progress is driven by websocket events.
+            self.jobs[job_id] = JobState(
+                status=JobStatus.queued,
+                node_count=len(prompt or {}),
+                sample_count=0,
+                batch_size=1,
+                seed=0,
+            )
+            logger.info("Custom workflow job %s submitted successfully", job_id)
+            return job_id
+
     async def cancel(self, job_id: str) -> bool:
         """Cancel a job."""
         if not self._session:

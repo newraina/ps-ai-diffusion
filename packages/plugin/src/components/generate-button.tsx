@@ -8,6 +8,9 @@ import type { InpaintMode } from '../types'
 interface GenerateButtonProps {
   onClick: () => void
   onQueueCurrent?: () => void
+  onQueueFront?: () => void
+  onQueueReplace?: () => void
+  onCancelAll?: () => void
   queueDisabled?: boolean
   disabled?: boolean
 }
@@ -15,6 +18,9 @@ interface GenerateButtonProps {
 export function GenerateButton({
   onClick,
   onQueueCurrent,
+  onQueueFront,
+  onQueueReplace,
+  onCancelAll,
   queueDisabled = false,
   disabled = false,
 }: GenerateButtonProps) {
@@ -147,6 +153,26 @@ export function GenerateButton({
                 >
                   Queue Current Settings
                 </button>
+                {onQueueFront && (
+                  <button
+                    type="button"
+                    className="queue-add"
+                    onClick={onQueueFront}
+                    disabled={queueDisabled}
+                  >
+                    Queue To Front
+                  </button>
+                )}
+                {onQueueReplace && (
+                  <button
+                    type="button"
+                    className="queue-add"
+                    onClick={onQueueReplace}
+                    disabled={queueDisabled}
+                  >
+                    Replace Queue
+                  </button>
+                )}
               </div>
             )}
             {queue.length === 0 ? (
@@ -180,6 +206,15 @@ export function GenerateButton({
                 >
                   Clear Queue
                 </button>
+                {onCancelAll && (
+                  <button
+                    type="button"
+                    className="queue-clear"
+                    onClick={onCancelAll}
+                  >
+                    Cancel Active & Clear
+                  </button>
+                )}
               </div>
             )}
           </div>

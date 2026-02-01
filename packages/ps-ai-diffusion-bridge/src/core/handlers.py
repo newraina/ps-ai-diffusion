@@ -44,6 +44,14 @@ class GenerateParams:
     image: Optional[str] = None  # Base64 PNG for img2img
     strength: float = 1.0  # Denoise strength (1.0 = full, 0.0 = none)
     mask: Optional[str] = None  # Base64 PNG mask for inpaint/refine_region
+    # Inpaint parameters (best-effort mapping to shared.api.InpaintParams).
+    # These are applied when a mask is present.
+    inpaint_mode: str = "automatic"
+    inpaint_fill: str = "neutral"
+    inpaint_context: str = "automatic"
+    inpaint_padding: int = 0
+    inpaint_grow: int = 0
+    inpaint_feather: int = 0
     # Optional LoRAs. Each entry can contain:
     # - name: str (required)
     # - strength: float (optional, default 1.0)
@@ -72,6 +80,19 @@ class UpscaleParams:
     image: str  # Base64 encoded PNG
     factor: float = 2.0
     model: str = ""
+    # Optional tiled diffusion refine after upscaling (Krita parity).
+    refine: bool = False
+    checkpoint: str = ""
+    prompt: str = ""
+    negative_prompt: str = ""
+    steps: int = 20
+    cfg_scale: float = 7.0
+    sampler: str = "euler"
+    scheduler: str = "normal"
+    seed: int = -1
+    strength: float = 0.35
+    tile_overlap: int = -1
+    loras: list[dict] = field(default_factory=list)
 
 
 def get_comfy_url(request_url: Optional[str]) -> str:
@@ -430,6 +451,8 @@ def _build_workflow_input(params: GenerateParams):
         RegionInput,
         InpaintParams,
         InpaintMode,
+        InpaintContext,
+        FillMode,
     )
     from shared.image import Extent, Bounds, Image
     from shared.resources import ControlMode
@@ -646,22 +669,79 @@ def _build_workflow_input(params: GenerateParams):
             # Ensure grayscale mask
             mask_img = mask_img.to_grayscale()
 
-        # Compute bounds from non-zero pixels; fall back to full image bounds.
+        # Compute bounds from non-zero pixels.
         raw = bytes(mask_img.data)
         bbox = _mask_bounds_from_grayscale_bytes(raw, mask_img.width, mask_img.height)
         if bbox is None:
             raise ValueError("mask is empty")
         x, y, w, h = bbox
-        bounds = Bounds(x, y, w, h)
+        mask_bounds = Bounds(x, y, w, h)
 
         images.hires_mask = mask_img
 
-        # Minimal inpaint params. Fine-grained options can be added later.
-        inpaint = InpaintParams(InpaintMode.fill, bounds)
+        # Build inpaint params (mode/fill/context + padding/grow/feather).
+        # Defaults keep backwards-compatible behavior.
+        mode_key = str(getattr(params, "inpaint_mode", "automatic") or "automatic").lower()
+        if mode_key in InpaintMode.__members__:
+            inpaint_mode = InpaintMode[mode_key]
+        else:
+            inpaint_mode = InpaintMode.automatic
+
+        fill_key = str(getattr(params, "inpaint_fill", "neutral") or "neutral").lower()
+        # For replace_background, default to FillMode.replace unless explicitly overridden.
+        if inpaint_mode is InpaintMode.replace_background and fill_key == "neutral":
+            fill_key = "replace"
+        if fill_key in FillMode.__members__:
+            inpaint_fill = FillMode[fill_key]
+        else:
+            inpaint_fill = FillMode.neutral
+
+        ctx_key = str(getattr(params, "inpaint_context", "automatic") or "automatic").lower()
+        if ctx_key in InpaintContext.__members__:
+            inpaint_context = InpaintContext[ctx_key]
+        else:
+            inpaint_context = InpaintContext.automatic
+
+        # Choose target bounds based on context.
+        if inpaint_context is InpaintContext.entire_image:
+            target_bounds = Bounds(0, 0, mask_img.width, mask_img.height)
+        elif inpaint_context is InpaintContext.layer_bounds:
+            # Layer bounds are not available in this bridge yet; fall back to mask bounds.
+            target_bounds = mask_bounds
+        else:
+            target_bounds = mask_bounds
+
+        # Apply additional padding around target bounds (document coordinates).
+        try:
+            pad = int(getattr(params, "inpaint_padding", 0) or 0)
+        except Exception:
+            pad = 0
+        pad = max(0, pad)
+        if pad > 0:
+            target_bounds = Bounds.pad(target_bounds, pad, multiple=8)
+            target_bounds = Bounds.clamp(target_bounds, Extent(mask_img.width, mask_img.height))
+
+        try:
+            grow = int(getattr(params, "inpaint_grow", 0) or 0)
+        except Exception:
+            grow = 0
+        try:
+            feather = int(getattr(params, "inpaint_feather", 0) or 0)
+        except Exception:
+            feather = 0
+
+        inpaint = InpaintParams(
+            mode=inpaint_mode,
+            target_bounds=target_bounds,
+            fill=inpaint_fill,
+            grow=max(0, grow),
+            feather=max(0, feather),
+            blend=0,
+        ).clamped()
         inpaint.use_inpaint_model = params.strength >= 0.95
 
         if kind is WorkflowKind.inpaint:
-            crop_upscale_extent = bounds.extent
+            crop_upscale_extent = target_bounds.extent
 
     return WorkflowInput(
         kind=kind,
@@ -911,6 +991,103 @@ async def handle_upscale(params: UpscaleParams) -> ApiResponse:
         )
 
     try:
+        if params.refine:
+            # Tiled diffusion refine after upscaling (Krita parity).
+            import random
+            import src.path_setup  # noqa: F401
+
+            from shared.api import (
+                WorkflowInput,
+                WorkflowKind,
+                ImageInput,
+                ExtentInput,
+                SamplingInput,
+                ConditioningInput,
+                CheckpointInput,
+                LoraInput,
+                UpscaleInput,
+            )
+            from shared.image import Image, Extent
+
+            image_b64 = params.image
+            if "," in image_b64:
+                image_b64 = image_b64.split(",", 1)[1]
+            try:
+                image_bytes = base64.b64decode(image_b64)
+            except Exception as e:
+                return ApiResponse(data={"error": f"Invalid base64 image: {e}"}, status=400)
+
+            image = Image.from_bytes(image_bytes)
+            target_extent = image.extent * params.factor
+            extent_input = ExtentInput(image.extent, target_extent, target_extent, target_extent)
+            images = ImageInput(extent=extent_input, initial_image=image)
+
+            seed = params.seed if params.seed >= 0 else random.randint(0, 2**31 - 1)
+            total_steps = max(1, int(params.steps))
+            denoise = float(params.strength)
+            denoise = max(0.05, min(0.95, denoise))
+            start_step = int(total_steps * (1 - denoise))
+
+            sampling = SamplingInput(
+                sampler=params.sampler,
+                scheduler=params.scheduler,
+                cfg_scale=float(params.cfg_scale),
+                total_steps=total_steps,
+                start_step=start_step,
+                seed=seed,
+            )
+
+            prompt_clean, lora_tags = _parse_lora_tags(params.prompt or "")
+            negative_clean, _ = _parse_lora_tags(params.negative_prompt or "")
+            conditioning = ConditioningInput(positive=prompt_clean, negative=negative_clean)
+
+            loras: list[LoraInput] = []
+            for name, strength in lora_tags:
+                loras.append(LoraInput(name=name, strength=strength))
+            for entry in (params.loras or []):
+                try:
+                    name = str(entry.get("name", "")).strip()
+                    if not name:
+                        continue
+                    strength = float(entry.get("strength", 1.0))
+                    loras.append(LoraInput(name=name, strength=strength))
+                except Exception:
+                    continue
+
+            if not params.checkpoint:
+                return ApiResponse(data={"error": "checkpoint is required for refine upscaling"}, status=400)
+
+            models = CheckpointInput(checkpoint=params.checkpoint, loras=loras)
+            upscale = UpscaleInput(model=params.model or "", tile_overlap=int(params.tile_overlap))
+
+            work = WorkflowInput(
+                kind=WorkflowKind.upscale_tiled,
+                images=images,
+                models=models,
+                sampling=sampling,
+                conditioning=conditioning,
+                upscale=upscale,
+                batch_count=1,
+            )
+
+            if state.backend_type == BackendType.cloud:
+                if not cloud_manager.is_connected:
+                    return ApiResponse(
+                        data={"error": "Not connected to cloud service"},
+                        status=503
+                    )
+                job_id = await cloud_manager.enqueue(work)
+                return ApiResponse(data={"job_id": job_id, "status": "queued"})
+
+            manager = get_manager()
+            if not manager.is_connected:
+                return ApiResponse(
+                    data={"error": "Not connected to ComfyUI"},
+                    status=503
+                )
+            job_id = await manager.enqueue_workflow(work, batch_size=1, seed=seed)
+            return ApiResponse(data={"job_id": job_id, "status": "queued"})
+
         if state.backend_type == BackendType.cloud:
             if not cloud_manager.is_connected:
                 return ApiResponse(
@@ -952,6 +1129,30 @@ async def handle_upscale(params: UpscaleParams) -> ApiResponse:
             factor=params.factor,
             model=params.model,
         )
+        return ApiResponse(data={"job_id": job_id, "status": "queued"})
+    except Exception as e:
+        return ApiResponse(data={"error": str(e)}, status=500)
+
+
+async def handle_custom_workflow(workflow: dict) -> ApiResponse:
+    """Execute a user-supplied custom ComfyUI workflow graph (local backend only)."""
+    if state.backend_type == BackendType.cloud:
+        return ApiResponse(
+            data={"error": "Custom workflows are not supported for cloud backend"},
+            status=400,
+        )
+
+    manager = get_manager()
+    if not manager.is_connected:
+        return ApiResponse(
+            data={"error": "Not connected to ComfyUI"},
+            status=503,
+        )
+
+    try:
+        if not isinstance(workflow, dict) or not workflow:
+            return ApiResponse(data={"error": "workflow must be a non-empty object"}, status=400)
+        job_id = await manager.enqueue_raw_prompt(workflow)
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
     except Exception as e:
         return ApiResponse(data={"error": str(e)}, status=500)

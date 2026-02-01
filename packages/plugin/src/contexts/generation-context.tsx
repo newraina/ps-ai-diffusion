@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import type { GenerationState, Workspace, Style, InpaintMode, InpaintFillMode, InpaintContext, ControlLayer, Region, QueueItem } from '../types'
+import type { GenerationState, Workspace, Style, InpaintMode, InpaintFillMode, InpaintContext, ControlLayer, Region, QueueItem, LoraItem } from '../types'
 
 interface GenerationContextValue extends GenerationState {
   setWorkspace: (workspace: Workspace) => void
@@ -21,6 +21,10 @@ interface GenerationContextValue extends GenerationState {
   setSampler: (sampler: string) => void
   setScheduler: (scheduler: string) => void
   setUseStyleDefaults: (useDefaults: boolean) => void
+  setLoras: (loras: LoraItem[]) => void
+  addLora: () => void
+  updateLora: (id: string, updates: Partial<LoraItem>) => void
+  removeLora: (id: string) => void
   setControlLayers: (layers: ControlLayer[]) => void
   addControlLayer: () => void
   updateControlLayer: (id: string, updates: Partial<ControlLayer>) => void
@@ -59,6 +63,7 @@ const defaultState: GenerationState = {
   sampler: 'euler',
   scheduler: 'normal',
   useStyleDefaults: true,
+  loras: [],
   controlLayers: [],
   regions: [],
   queue: [],
@@ -145,6 +150,33 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, useStyleDefaults }))
   }, [])
 
+  const setLoras = useCallback((loras: LoraItem[]) => {
+    setState(s => ({ ...s, loras }))
+  }, [])
+
+  const addLora = useCallback(() => {
+    const newLora: LoraItem = {
+      id: crypto.randomUUID(),
+      name: '',
+      strength: 1.0,
+    }
+    setState(s => ({ ...s, loras: [...s.loras, newLora] }))
+  }, [])
+
+  const updateLora = useCallback((id: string, updates: Partial<LoraItem>) => {
+    setState(s => ({
+      ...s,
+      loras: s.loras.map(l => (l.id === id ? { ...l, ...updates } : l)),
+    }))
+  }, [])
+
+  const removeLora = useCallback((id: string) => {
+    setState(s => ({
+      ...s,
+      loras: s.loras.filter(l => l.id !== id),
+    }))
+  }, [])
+
   const setControlLayers = useCallback((controlLayers: ControlLayer[]) => {
     setState(s => ({ ...s, controlLayers }))
   }, [])
@@ -157,6 +189,8 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
       layerName: '',
       image: null,
       strength: 1.0,
+      rangeStart: 0.0,
+      rangeEnd: 1.0,
       isEnabled: true,
       isPreprocessor: true,
     }
@@ -188,6 +222,9 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
       prompt: '',
       negativePrompt: '',
       layerId: null,
+      maskSource: 'selection',
+      maskBase64: null,
+      bounds: null,
       isVisible: true,
     }
     setState(s => ({ ...s, regions: [...s.regions, newRegion] }))
@@ -258,6 +295,10 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
         setSampler,
         setScheduler,
         setUseStyleDefaults,
+        setLoras,
+        addLora,
+        updateLora,
+        removeLora,
         setControlLayers,
         addControlLayer,
         updateControlLayer,

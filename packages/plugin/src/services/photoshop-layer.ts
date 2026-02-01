@@ -88,6 +88,13 @@ const uxp = require('uxp') as { storage: UXPStorage }
 const { app, action, core } = photoshop
 const { storage } = uxp
 
+export interface PixelBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /**
  * Convert base64 PNG to ArrayBuffer.
  * Handles both raw base64 and data URL format (data:image/png;base64,...).
@@ -427,6 +434,275 @@ export async function getSelectionMaskBase64(): Promise<string | null> {
         }
       },
       { commandName: 'Export Selection Mask' },
+    )
+  })
+}
+
+function _parseUnitPx(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (value && typeof value === 'object') {
+    const v = (value as any)._value
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+  }
+  return null
+}
+
+function _parseBoundsFromDescriptor(bounds: any): PixelBounds | null {
+  if (!bounds || typeof bounds !== 'object') return null
+  const left = _parseUnitPx(bounds.left)
+  const top = _parseUnitPx(bounds.top)
+  const right = _parseUnitPx(bounds.right)
+  const bottom = _parseUnitPx(bounds.bottom)
+  if (
+    left === null ||
+    top === null ||
+    right === null ||
+    bottom === null
+  ) {
+    return null
+  }
+  return {
+    x: Math.round(left),
+    y: Math.round(top),
+    width: Math.max(0, Math.round(right - left)),
+    height: Math.max(0, Math.round(bottom - top)),
+  }
+}
+
+/**
+ * Get bounds of a layer in document coordinates.
+ *
+ * Notes:
+ * - This uses action descriptors; behavior depends on Photoshop version.
+ * - Returns null if bounds cannot be retrieved.
+ */
+export async function getLayerBounds(layerId: number): Promise<PixelBounds | null> {
+  try {
+    const result = await action.batchPlay(
+      [
+        {
+          _obj: 'get',
+          _target: [
+            { _property: 'bounds' },
+            { _ref: 'layer', _id: layerId },
+          ],
+          _options: { dialogOptions: 'dontDisplay' },
+        },
+      ],
+      { synchronousExecution: true },
+    )
+    const bounds = (result?.[0] as any)?.bounds
+    return _parseBoundsFromDescriptor(bounds)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get bounds of the active selection in document coordinates.
+ *
+ * Returns null if there is no selection or bounds cannot be parsed.
+ */
+export async function getSelectionBounds(): Promise<PixelBounds | null> {
+  const doc = app.activeDocument
+  if (!doc) return null
+
+  const hasSel = await hasActiveSelection()
+  if (!hasSel) return null
+
+  try {
+    const result = await action.batchPlay(
+      [
+        {
+          _obj: 'get',
+          _target: [
+            { _property: 'selection' },
+            { _ref: 'document', _id: doc.id },
+          ],
+          _options: { dialogOptions: 'dontDisplay' },
+        },
+      ],
+      { synchronousExecution: true },
+    )
+
+    const selection = (result?.[0] as any)?.selection
+    if (!selection) return null
+
+    // Some builds return { bounds: { top/left/bottom/right } }
+    const bounds1 = _parseBoundsFromDescriptor(selection.bounds)
+    if (bounds1) return bounds1
+
+    // Other builds might return bounds directly on selection.
+    const bounds2 = _parseBoundsFromDescriptor(selection)
+    if (bounds2) return bounds2
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Export a layer's transparency as a black/white PNG mask.
+ *
+ * The resulting mask image is tightly cropped to the layer's bounds (like `getLayerImageBase64`),
+ * so callers should pair it with `getLayerBounds(layerId)` for placement in document coordinates.
+ */
+export async function getLayerTransparencyMaskBase64(layerId: number): Promise<string> {
+  const doc = app.activeDocument
+  if (!doc) {
+    throw new Error('No active document')
+  }
+
+  // Ensure the layer exists (top-level only, like getLayerImageBase64).
+  const layer = doc.layers.find(l => l.id === layerId)
+  if (!layer) {
+    throw new Error(`Layer ${layerId} not found`)
+  }
+
+  return new Promise((resolve, reject) => {
+    core.executeAsModal(
+      async () => {
+        try {
+          // 1) Select the layer
+          await action.batchPlay(
+            [
+              {
+                _obj: 'select',
+                _target: [{ _ref: 'layer', _id: layerId }],
+                makeVisible: false,
+                layerID: [layerId],
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 2) Duplicate the layer into a new document (transparent background)
+          await action.batchPlay(
+            [
+              {
+                _obj: 'duplicate',
+                _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }],
+                version: 5,
+                name: 'temp_layer_mask',
+                document: {
+                  _obj: 'document',
+                  mode: { _enum: 'colorSpace', _value: 'RGBColor' },
+                  fill: { _enum: 'fillMode', _value: 'transparent' },
+                  name: 'temp_layer_mask_doc',
+                },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 3) Trim transparency so mask is tightly cropped (matches layer bounds)
+          await action.batchPlay(
+            [
+              {
+                _obj: 'trim',
+                basedOn: { _enum: 'trimBasedOn', _value: 'transparency' },
+                top: true,
+                bottom: true,
+                left: true,
+                right: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 4) Fill whole canvas black
+          await action.batchPlay(
+            [
+              {
+                _obj: 'set',
+                _target: [{ _ref: 'channel', _property: 'selection' }],
+                to: { _enum: 'ordinal', _value: 'allEnum' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+              {
+                _obj: 'fill',
+                using: { _enum: 'fillContents', _value: 'color' },
+                color: { _obj: 'RGBColor', red: 0, green: 0, blue: 0 },
+                opacity: 100,
+                mode: { _enum: 'blendMode', _value: 'normal' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 5) Load transparency as selection and fill white
+          // NOTE: Photoshop action descriptor enum names differ between hosts.
+          // This works in most UXP environments; if it fails, callers should fall back to selection masks.
+          await action.batchPlay(
+            [
+              {
+                _obj: 'set',
+                _target: [{ _ref: 'channel', _property: 'selection' }],
+                to: { _ref: 'channel', _enum: 'channel', _value: 'transparencyEnum' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+              {
+                _obj: 'fill',
+                using: { _enum: 'fillContents', _value: 'color' },
+                color: { _obj: 'RGBColor', red: 255, green: 255, blue: 255 },
+                opacity: 100,
+                mode: { _enum: 'blendMode', _value: 'normal' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 6) Save PNG and return base64
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder()
+          const fileName = `layer_mask_${Date.now()}.png`
+          const tempFile = await tempFolder.createFile(fileName, { overwrite: true })
+          const fileToken = storage.localFileSystem.createSessionToken(tempFile)
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'save',
+                as: {
+                  _obj: 'PNGFormat',
+                  method: { _enum: 'PNGMethod', _value: 'moderate' },
+                },
+                in: { _path: fileToken, _kind: 'local' },
+                copy: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'close',
+                saving: { _enum: 'yesNo', _value: 'no' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          const arrayBuffer = await tempFile.read({ format: storage.formats.binary })
+          const bytes = new Uint8Array(arrayBuffer as ArrayBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          resolve(btoa(binary))
+        } catch (error) {
+          reject(error)
+        }
+      },
+      { commandName: 'Export Layer Mask' },
     )
   })
 }

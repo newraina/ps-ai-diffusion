@@ -81,6 +81,13 @@ export interface GenerateRequest {
   image?: string
   strength?: number // 0.0-1.0, denoise strength for img2img
   mask?: string
+  // Inpaint parameters (best-effort; supported by bridge for local/cloud workflows)
+  inpaint_mode?: string
+  inpaint_fill?: string
+  inpaint_context?: string
+  inpaint_padding?: number
+  inpaint_grow?: number
+  inpaint_feather?: number
   batch_size?: number
   sampler?: string
   scheduler?: string
@@ -110,6 +117,19 @@ export interface UpscaleRequest {
   image: string // Base64 encoded PNG
   factor: number
   model?: string
+  // Optional tiled diffusion refine after upscaling
+  refine?: boolean
+  checkpoint?: string
+  prompt?: string
+  negative_prompt?: string
+  steps?: number
+  cfg_scale?: number
+  sampler?: string
+  scheduler?: string
+  seed?: number
+  strength?: number
+  tile_overlap?: number
+  loras?: Array<{ name: string; strength?: number; data?: string }>
 }
 
 export interface GenerateResponse {
@@ -257,6 +277,19 @@ export async function upscale(request: UpscaleRequest): Promise<GenerateResponse
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || error.error || 'Upscale failed')
+  }
+  return response.json()
+}
+
+export async function runCustomWorkflow(workflow: Record<string, unknown>): Promise<GenerateResponse> {
+  const response = await fetch(getApiUrl('/custom'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow }),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Custom workflow failed')
   }
   return response.json()
 }

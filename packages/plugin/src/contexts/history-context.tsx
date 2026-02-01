@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import type { HistoryGroup } from '../types'
-import { mockHistory, placeholderThumbnail } from '../services/mock-data'
 import { updatePreviewLayer, applyAsLayer, deletePreviewLayer } from '../services/photoshop-layer'
 
 interface HistoryContextValue {
@@ -18,33 +17,38 @@ interface HistoryContextValue {
 const HistoryContext = createContext<HistoryContextValue | null>(null)
 
 export function HistoryProvider({ children }: { children: ReactNode }) {
-  // Initialize with placeholder thumbnails
-  const [groups, setGroups] = useState<HistoryGroup[]>(() =>
-    mockHistory.map(g => ({
-      ...g,
-      images: g.images.map(img => ({
-        ...img,
-        thumbnail: img.thumbnail || placeholderThumbnail,
-      })),
-    }))
-  )
+  const STORAGE_KEY = 'ps-ai-diffusion-history-v1'
+
+  const [groups, setGroups] = useState<HistoryGroup[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed as HistoryGroup[]
+    } catch {
+      return []
+    }
+  })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, _setLoading] = useState(false)
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(groups))
+    } catch {
+      // Ignore storage errors (quota, etc.)
+    }
+  }, [groups])
+
   const selectImage = useCallback((jobId: string, index: number) => {
     setSelectedId(`${jobId}-${index}`)
-    // Show preview layer
-    setGroups(currentGroups => {
-      const group = currentGroups.find(g => g.job_id === jobId)
-      if (group) {
-        const image = group.images[index]
-        if (image) {
-          updatePreviewLayer(image.thumbnail, group.prompt)
-        }
-      }
-      return currentGroups
-    })
-  }, [])
+    const group = groups.find(g => g.job_id === jobId)
+    const image = group?.images[index]
+    if (group && image) {
+      updatePreviewLayer(image.thumbnail, group.prompt)
+    }
+  }, [groups])
 
   const clearSelection = useCallback(() => {
     setSelectedId(null)

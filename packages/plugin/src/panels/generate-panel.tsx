@@ -10,6 +10,7 @@ import { RegionSection } from '../components/sections/region-section'
 import { ControlLayerSection } from '../components/sections/control-layer-section'
 import { InpaintSettings } from '../components/sections/inpaint-settings'
 import { GenerationSettings } from '../components/sections/generation-settings'
+import { LoraSection } from '../components/sections/lora-section'
 import { useGeneration } from '../contexts/generation-context'
 import { useHistory } from '../contexts/history-context'
 import {
@@ -22,6 +23,7 @@ import { hasActiveDocument, hasActiveSelection, getSelectionMaskBase64, getDocum
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import { openBrowser } from '../utils/uxp'
+import { getSettings } from '../services/settings'
 import type { GenerationSnapshot, HistoryGroup, HistoryImage, QueueItem } from '../types'
 
 interface GeneratePanelProps {
@@ -54,6 +56,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     isGenerating,
     setIsGenerating,
     setProgress,
+    loras,
     controlLayers,
     regions,
     queue,
@@ -92,6 +95,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     sampler,
     scheduler,
     useStyleDefaults,
+    loras,
     controlLayers,
     regions,
   }), [
@@ -112,6 +116,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     sampler,
     scheduler,
     useStyleDefaults,
+    loras,
     controlLayers,
     regions,
   ])
@@ -201,18 +206,38 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         ? snapshot.style.steps
         : snapshot.steps
 
-      const activeControlLayers = snapshot.controlLayers.filter(l => l.isEnabled && l.layerId !== null)
+      const activeControlLayers = snapshot.controlLayers.filter(
+        l => l.isEnabled && (!!l.image || l.layerId !== null),
+      )
       const controlNetArgs = []
 
       if (activeControlLayers.length > 0) {
         setProgress(0, 'Processing control layers...')
+        const mapControlMode = (mode: string): string => {
+          // Map Photoshop UI modes to shared.resources.ControlMode member names.
+          switch (mode) {
+            case 'canny':
+              return 'canny_edge'
+            case 'lineart':
+              return 'line_art'
+            case 'softedge':
+              return 'soft_edge'
+            default:
+              return mode
+          }
+        }
+
         for (const layer of activeControlLayers) {
           try {
-            const image = await getLayerImageBase64(layer.layerId!)
+            const image = layer.image
+              ? layer.image
+              : await getLayerImageBase64(layer.layerId!)
             controlNetArgs.push({
-              mode: layer.mode,
+              mode: mapControlMode(layer.mode),
               image: image,
               strength: layer.strength,
+              range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1],
+              preprocessor: layer.isPreprocessor,
             })
           } catch (e) {
             console.error(`Failed to get image for control layer ${layer.layerName}:`, e)
@@ -221,7 +246,47 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         }
       }
 
+      const regionArgs = []
+      const activeRegions = snapshot.regions.filter(r => r.isVisible && r.prompt.trim())
+      if (activeRegions.length > 0) {
+        setProgress(0, 'Processing regions...')
+        // Lazy import to avoid circular dependency issues.
+        const {
+          getSelectionBounds,
+          getLayerBounds,
+          getLayerTransparencyMaskBase64,
+        } = await import('../services/photoshop-layer')
+
+        for (const region of activeRegions) {
+          let mask = region.maskBase64
+          let bounds = region.bounds
+
+          // Best-effort capture if user hasn't captured explicitly.
+          if (!mask) {
+            if (region.maskSource === 'selection') {
+              mask = await getSelectionMaskBase64()
+              bounds = await getSelectionBounds()
+            } else if (region.maskSource === 'layer' && region.layerId) {
+              bounds = await getLayerBounds(region.layerId)
+              mask = await getLayerTransparencyMaskBase64(region.layerId)
+            }
+          }
+
+          if (!mask) {
+            console.warn(`Skipping region "${region.name}" - no mask available`)
+            continue
+          }
+
+          regionArgs.push({
+            positive: region.prompt,
+            mask,
+            bounds: bounds || undefined,
+          })
+        }
+      }
+
       setProgress(0, 'Submitting...')
+      const settings = getSettings()
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
@@ -234,7 +299,17 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         cfg_scale: finalCfgScale,
         steps: finalSteps,
         seed: snapshot.fixedSeed ? snapshot.seed : -1,
+        inpaint_mode: snapshot.inpaintMode,
+        inpaint_fill: snapshot.inpaintFill,
+        inpaint_context: snapshot.inpaintContext,
+        inpaint_padding: settings.selectionPadding,
+        inpaint_grow: settings.selectionGrow,
+        inpaint_feather: settings.selectionFeather,
+        loras: snapshot.loras
+          .filter(l => l.name.trim())
+          .map(l => ({ name: l.name.trim(), strength: l.strength })),
         control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
+        regions: regionArgs.length > 0 ? regionArgs : undefined,
         mask: maskBase64 || undefined,
         ...(isRefineMode && {
           image: imageBase64,
@@ -385,6 +460,44 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     enqueueJob(item)
   }, [prompt, buildSnapshot, enqueueJob])
 
+  const handleQueueFront = useCallback(() => {
+    if (!prompt.trim()) return
+    const snapshot = buildSnapshot()
+    const item: QueueItem = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      snapshot,
+    }
+    setQueue([item, ...queueRef.current])
+  }, [prompt, buildSnapshot, setQueue])
+
+  const handleQueueReplace = useCallback(() => {
+    if (!prompt.trim()) return
+    const snapshot = buildSnapshot()
+    const item: QueueItem = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      snapshot,
+    }
+    setQueue([item])
+  }, [prompt, buildSnapshot, setQueue])
+
+  const handleCancelAll = useCallback(async () => {
+    // Cancel active job (if any) and clear queue.
+    setQueue([])
+    if (isGenerating && currentJobRef.current) {
+      cancelledRef.current = true
+      try {
+        await cancelJob(currentJobRef.current)
+      } catch (error) {
+        console.error('Failed to cancel job:', error)
+      }
+      setIsGenerating(false)
+      setProgress(0)
+      currentJobRef.current = null
+    }
+  }, [isGenerating, setQueue, setIsGenerating, setProgress])
+
   return (
     <div className="generate-panel">
       <StyleSelector
@@ -395,6 +508,8 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       <RegionSection />
       
       <PromptSection onSubmit={handleGenerate} disabled={isGenerating} />
+
+      <LoraSection />
       
       <ControlLayerSection />
       
@@ -410,6 +525,9 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       <GenerateButton
         onClick={handleGenerate}
         onQueueCurrent={handleQueueCurrent}
+        onQueueFront={handleQueueFront}
+        onQueueReplace={handleQueueReplace}
+        onCancelAll={handleCancelAll}
         queueDisabled={!prompt.trim()}
         disabled={!isConnected || !prompt.trim()}
       />

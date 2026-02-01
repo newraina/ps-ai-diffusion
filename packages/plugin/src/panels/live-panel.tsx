@@ -2,14 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@swc-react/button'
 import { StyleSelector } from '../components/style-selector'
 import { PromptSection } from '../components/prompt-section'
+import { StrengthSlider } from '../components/strength-slider'
 import { ProgressBar } from '../components/progress-bar'
 import { GenerationSettings } from '../components/sections/generation-settings'
+import { RegionSection } from '../components/sections/region-section'
+import { ControlLayerSection } from '../components/sections/control-layer-section'
+import { LoraSection } from '../components/sections/lora-section'
 import { useGeneration } from '../contexts/generation-context'
 import { generate, getJobStatus, getJobImages, cancelJob } from '../services/bridge-client'
-import { hasActiveDocument, updatePreviewLayer, applyAsLayer, deletePreviewLayer } from '../services/photoshop-layer'
+import { useHistory } from '../contexts/history-context'
+import { hasActiveDocument, getDocumentImageBase64, getLayerImageBase64, updatePreviewLayer, applyAsLayer, deletePreviewLayer } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import { openBrowser } from '../utils/uxp'
+import type { HistoryGroup, HistoryImage } from '../types'
 
 interface LivePanelProps {
   isConnected: boolean
@@ -23,6 +29,7 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
   const {
     prompt,
     negativePrompt,
+    strength,
     style,
     width,
     height,
@@ -33,11 +40,16 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
     useStyleDefaults,
     seed,
     fixedSeed,
+    loras,
+    controlLayers,
+    regions,
     setProgress,
     setIsGenerating,
   } = useGeneration()
+  const { addGenerationResult } = useHistory()
   const [isLive, setIsLive] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
   const currentJobRef = useRef<string | null>(null)
   const cancelledRef = useRef(false)
   const lastPreviewRef = useRef<string | null>(null)
@@ -59,6 +71,8 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
     setProgress(0, 'Live preview...')
 
     try {
+      const isRefineMode = strength < 100
+
       const finalPrompt = style
         ? applyStylePrompt(style.style_prompt, prompt)
         : prompt
@@ -82,6 +96,54 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
         ? style.steps
         : steps
 
+      let imageBase64: string | undefined
+      if (isRefineMode) {
+        setProgress(0, 'Capturing document...')
+        imageBase64 = await getDocumentImageBase64()
+      }
+
+      const activeControlLayers = controlLayers.filter(
+        l => l.isEnabled && (!!l.image || l.layerId !== null),
+      )
+      const controlNetArgs = []
+      if (activeControlLayers.length > 0) {
+        setProgress(0, 'Processing control layers...')
+        const mapControlMode = (mode: string): string => {
+          switch (mode) {
+            case 'canny':
+              return 'canny_edge'
+            case 'lineart':
+              return 'line_art'
+            case 'softedge':
+              return 'soft_edge'
+            default:
+              return mode
+          }
+        }
+        for (const layer of activeControlLayers) {
+          const img = layer.image ? layer.image : await getLayerImageBase64(layer.layerId!)
+          controlNetArgs.push({
+            mode: mapControlMode(layer.mode),
+            image: img,
+            strength: layer.strength,
+            range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1],
+            preprocessor: layer.isPreprocessor,
+          })
+        }
+      }
+
+      const regionArgs = []
+      const activeRegions = regions.filter(r => r.isVisible && r.prompt.trim() && r.maskBase64)
+      if (activeRegions.length > 0) {
+        for (const region of activeRegions) {
+          regionArgs.push({
+            positive: region.prompt,
+            mask: region.maskBase64!,
+            bounds: region.bounds || undefined,
+          })
+        }
+      }
+
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
@@ -94,6 +156,13 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
         seed: fixedSeed ? seed : -1,
         batch_size: 1,
         model: checkpoint,
+        loras: loras.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), strength: l.strength })),
+        control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
+        regions: regionArgs.length > 0 ? regionArgs : undefined,
+        ...(isRefineMode && imageBase64 && {
+          image: imageBase64,
+          strength: strength / 100,
+        }),
       })
 
       const jobId = response.job_id
@@ -147,6 +216,26 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
       const preview = `data:image/png;base64,${imagesResponse.images[0]}`
       lastPreviewRef.current = preview
       await updatePreviewLayer(preview, prompt)
+
+      if (isRecording) {
+        const historyImages: HistoryImage[] = [{
+          index: 0,
+          thumbnail: preview,
+          applied: false,
+          seed: imagesResponse.seeds[0] ?? seed,
+        }]
+        const historyGroup: HistoryGroup = {
+          job_id: `live-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          prompt,
+          negative_prompt: negativePrompt,
+          strength,
+          style_id: style?.id ?? '',
+          images: historyImages,
+        }
+        addGenerationResult(historyGroup)
+      }
+
       setProgress(1, 'Preview updated')
       setTimeout(() => setProgress(0), 600)
     } catch (error) {
@@ -160,6 +249,7 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
   }, [
     prompt,
     negativePrompt,
+    strength,
     style,
     width,
     height,
@@ -170,9 +260,14 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
     useStyleDefaults,
     seed,
     fixedSeed,
+    loras,
+    controlLayers,
+    regions,
     isConnected,
     setProgress,
     setIsGenerating,
+    isRecording,
+    addGenerationResult,
   ])
 
   useEffect(() => {
@@ -230,7 +325,11 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
         onOpenSettings={onOpenSettings}
         connectionStatus={connectionStatus}
       />
+      <RegionSection />
       <PromptSection disabled={isRefreshing} />
+      <LoraSection />
+      <ControlLayerSection />
+      <StrengthSlider />
       <GenerationSettings />
 
       <div className="live-controls">
@@ -241,6 +340,14 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
           disabled={!prompt.trim()}
         >
           {isLive ? 'Stop Live' : 'Start Live'}
+        </Button>
+        <Button
+          size="s"
+          variant={isRecording ? 'accent' : 'secondary'}
+          onClick={() => setIsRecording(v => !v)}
+          disabled={!isLive}
+        >
+          {isRecording ? 'Recording' : 'Record'}
         </Button>
         <Button
           size="s"

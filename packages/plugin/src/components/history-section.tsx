@@ -77,11 +77,37 @@ export function HistorySection() {
     closeContextMenu()
   }, [groups, contextMenu.jobId, closeContextMenu])
 
+  const handleCopyNegativePrompt = useCallback(() => {
+    const group = groups.find(g => g.job_id === contextMenu.jobId)
+    if (group) {
+      navigator.clipboard?.writeText(group.negative_prompt || '')
+    }
+    closeContextMenu()
+  }, [groups, contextMenu.jobId, closeContextMenu])
+
   const handleCopySeed = useCallback(() => {
     const group = groups.find(g => g.job_id === contextMenu.jobId)
     if (group) {
       const image = group.images[contextMenu.index]
       navigator.clipboard?.writeText(String(image.seed))
+    }
+    closeContextMenu()
+  }, [groups, contextMenu, closeContextMenu])
+
+  const handleCopyInfo = useCallback(() => {
+    const group = groups.find(g => g.job_id === contextMenu.jobId)
+    if (group) {
+      const image = group.images[contextMenu.index]
+      const payload = {
+        prompt: group.prompt,
+        negative_prompt: group.negative_prompt,
+        seed: image?.seed,
+        strength: group.strength,
+        style_id: group.style_id,
+        job_id: group.job_id,
+        timestamp: group.timestamp,
+      }
+      navigator.clipboard?.writeText(JSON.stringify(payload, null, 2))
     }
     closeContextMenu()
   }, [groups, contextMenu, closeContextMenu])
@@ -138,8 +164,14 @@ export function HistorySection() {
           <div className="context-menu-item" onClick={handleCopyPrompt}>
             Copy Prompt
           </div>
+          <div className="context-menu-item" onClick={handleCopyNegativePrompt}>
+            Copy Negative Prompt
+          </div>
           <div className="context-menu-item" onClick={handleCopySeed}>
             Copy Seed
+          </div>
+          <div className="context-menu-item" onClick={handleCopyInfo}>
+            Copy Info (JSON)
           </div>
           <div className="context-menu-divider" />
           <div className="context-menu-item" onClick={handleDiscard}>

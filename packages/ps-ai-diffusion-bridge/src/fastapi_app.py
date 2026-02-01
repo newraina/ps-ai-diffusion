@@ -25,6 +25,7 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_custom_workflow,
     handle_auth_sign_in,
     handle_auth_confirm,
     handle_auth_validate,
@@ -106,6 +107,13 @@ class GenerateRequest(BaseModel):
     image: Optional[str] = None  # Base64 encoded PNG
     strength: float = 1.0  # 0.0-1.0 (img2img / refine)
     mask: Optional[str] = None  # Base64 encoded PNG mask (inpaint/refine_region)
+    # Inpaint parameters (best-effort mapping to shared.api.InpaintParams)
+    inpaint_mode: str = "automatic"
+    inpaint_fill: str = "neutral"
+    inpaint_context: str = "automatic"
+    inpaint_padding: int = 0
+    inpaint_grow: int = 0
+    inpaint_feather: int = 0
     loras: list[LoraRequest] = []
     control: list[ControlRequest] = []
     regions: list[RegionRequest] = []
@@ -120,6 +128,19 @@ class UpscaleRequest(BaseModel):
     image: str  # Base64 encoded PNG
     factor: float = 2.0
     model: str = ""
+    # Optional tiled diffusion refine after upscaling
+    refine: bool = False
+    checkpoint: str = ""
+    prompt: str = ""
+    negative_prompt: str = ""
+    steps: int = 20
+    cfg_scale: float = 7.0
+    sampler: str = "euler"
+    scheduler: str = "normal"
+    seed: int = -1
+    strength: float = 0.35
+    tile_overlap: int = -1
+    loras: list[LoraRequest] = []
 
 
 class AuthValidateRequest(BaseModel):
@@ -139,6 +160,12 @@ class JobImagesResponse(BaseModel):
     job_id: str
     images: list[str]  # Base64 encoded PNG images
     seeds: list[int]  # Seed used for each image
+
+
+# Custom workflow endpoints (local backend only)
+
+class CustomWorkflowRequest(BaseModel):
+    workflow: dict
 
 
 # Health & Connection Endpoints
@@ -230,6 +257,12 @@ async def generate(request: GenerateRequest):
         image=request.image,
         strength=request.strength,
         mask=request.mask,
+        inpaint_mode=request.inpaint_mode,
+        inpaint_fill=request.inpaint_fill,
+        inpaint_context=request.inpaint_context,
+        inpaint_padding=request.inpaint_padding,
+        inpaint_grow=request.inpaint_grow,
+        inpaint_feather=request.inpaint_feather,
         loras=[l.model_dump() for l in request.loras] if request.loras else [],
         control=[c.model_dump() for c in request.control] if request.control else [],
         regions=[r.model_dump() for r in request.regions] if request.regions else [],
@@ -286,8 +319,29 @@ async def upscale(request: UpscaleRequest):
         image=request.image,
         factor=request.factor,
         model=request.model,
+        refine=request.refine,
+        checkpoint=request.checkpoint,
+        prompt=request.prompt,
+        negative_prompt=request.negative_prompt,
+        steps=request.steps,
+        cfg_scale=request.cfg_scale,
+        sampler=request.sampler,
+        scheduler=request.scheduler,
+        seed=request.seed,
+        strength=request.strength,
+        tile_overlap=request.tile_overlap,
+        loras=[l.model_dump() for l in request.loras] if request.loras else [],
     )
     resp = await handle_upscale(params)
+    if resp.status != 200:
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+@app.post("/api/custom", response_model=GenerateResponse)
+async def custom_workflow(request: CustomWorkflowRequest):
+    """Submit a custom ComfyUI workflow graph (local backend only)."""
+    resp = await handle_custom_workflow(request.workflow)
     if resp.status != 200:
         raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
     return resp.data

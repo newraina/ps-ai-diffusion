@@ -26,6 +26,7 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_custom_workflow,
     handle_auth_sign_in,
     handle_auth_confirm,
     handle_auth_validate,
@@ -85,6 +86,12 @@ if PromptServer is not None:
             image=data.get("image"),
             strength=data.get("strength", 1.0),
             mask=data.get("mask"),
+            inpaint_mode=data.get("inpaint_mode", "automatic"),
+            inpaint_fill=data.get("inpaint_fill", "neutral"),
+            inpaint_context=data.get("inpaint_context", "automatic"),
+            inpaint_padding=data.get("inpaint_padding", 0),
+            inpaint_grow=data.get("inpaint_grow", 0),
+            inpaint_feather=data.get("inpaint_feather", 0),
             loras=data.get("loras", []) or [],
             control=data.get("control", []) or data.get("controls", []) or [],
             regions=data.get("regions", []) or [],
@@ -132,8 +139,26 @@ if PromptServer is not None:
             image=data.get("image", ""),
             factor=data.get("factor", 2.0),
             model=data.get("model", ""),
+            refine=bool(data.get("refine", False)),
+            checkpoint=data.get("checkpoint", ""),
+            prompt=data.get("prompt", ""),
+            negative_prompt=data.get("negative_prompt", ""),
+            steps=data.get("steps", 20),
+            cfg_scale=data.get("cfg_scale", 7.0),
+            sampler=data.get("sampler", "euler"),
+            scheduler=data.get("scheduler", "normal"),
+            seed=data.get("seed", -1),
+            strength=data.get("strength", 0.35),
+            tile_overlap=data.get("tile_overlap", -1),
+            loras=data.get("loras", []) or [],
         )
         resp = await handle_upscale(params)
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/custom")
+    async def custom_workflow(request):
+        data = await request.json()
+        resp = await handle_custom_workflow(data.get("workflow", {}))
         return _json_response(resp)
 
     # Cloud Authentication Endpoints
