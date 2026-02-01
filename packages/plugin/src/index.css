@@ -911,3 +911,129 @@ button:disabled {
 .upscale-button {
   width: 100%;
 }
+
+/* ==================== */
+/* Backend Tabs */
+/* ==================== */
+
+.backend-tabs {
+  display: flex;
+  border: 1px solid #444;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.backend-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 12px;
+  background: #2a2a2a;
+  border: none;
+  cursor: pointer;
+  color: #999;
+}
+
+.backend-tab + .backend-tab {
+  border-left: 1px solid #444;
+}
+
+.backend-tab:hover {
+  background: #333;
+}
+
+.backend-tab.active {
+  background: #3a3a3a;
+  color: #e0e0e0;
+}
+
+.backend-tab .tab-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.backend-tab .tab-status {
+  font-size: 10px;
+  margin-top: 2px;
+  color: #666;
+}
+
+.backend-tab .tab-status.connected {
+  color: #4caf50;
+}
+
+/* ==================== */
+/* Cloud Panel */
+/* ==================== */
+
+.cloud-panel {
+  padding: 12px;
+  background: #333;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.cloud-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.cloud-user-info > * + * {
+  margin-top: 8px;
+}
+
+.user-field {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.user-field .field-label {
+  color: #999;
+}
+
+.user-field .field-value {
+  color: #e0e0e0;
+}
+
+.user-field .field-value.credits {
+  font-weight: bold;
+  color: #4caf50;
+}
+
+.cloud-actions {
+  display: flex;
+  margin-top: 12px;
+}
+
+.cloud-actions > * + * {
+  margin-left: 8px;
+}
+
+.cloud-sign-in {
+  text-align: center;
+}
+
+.cloud-description {
+  font-size: 12px;
+  color: #999;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.waiting-message {
+  padding: 12px;
+  background: rgba(13, 102, 208, 0.1);
+  border-radius: 4px;
+}
+
+.waiting-message sp-body {
+  display: block;
+  text-align: center;
+}
+
+.waiting-message sp-body + sp-body {
+  margin-top: 4px;
+  color: #666;
+}

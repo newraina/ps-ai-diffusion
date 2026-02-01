@@ -24,7 +24,11 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_auth_sign_in,
+    handle_auth_confirm,
+    handle_auth_validate,
 )
+from src.core.cloud_client_manager import cloud_manager
 
 
 @asynccontextmanager
@@ -35,6 +39,8 @@ async def lifespan(app: FastAPI):
     manager = get_manager()
     if manager.is_connected:
         await manager.disconnect()
+    if cloud_manager.is_connected:
+        await cloud_manager.disconnect()
 
 
 app = FastAPI(title="PS AI Bridge", version="0.1.0", lifespan=lifespan)
@@ -82,6 +88,10 @@ class UpscaleRequest(BaseModel):
     model: str = ""
 
 
+class AuthValidateRequest(BaseModel):
+    token: str
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -101,6 +111,45 @@ class JobImagesResponse(BaseModel):
 @app.get("/api/health")
 async def health():
     resp = await handle_health()
+    return resp.data
+
+
+# Cloud Authentication Endpoints
+
+@app.post("/api/auth/sign-in")
+async def auth_sign_in():
+    """Start cloud service sign-in flow.
+
+    Returns a sign_in_url for the user to open in their browser.
+    """
+    resp = await handle_auth_sign_in()
+    if resp.status != 200:
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+@app.post("/api/auth/confirm")
+async def auth_confirm():
+    """Check if sign-in is complete.
+
+    Call this endpoint repeatedly after sign-in to check authorization status.
+    Returns status: "pending" if still waiting, or "authorized" with token and user info.
+    """
+    resp = await handle_auth_confirm()
+    if resp.status not in (200, 408):
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+@app.post("/api/auth/validate")
+async def auth_validate(request: AuthValidateRequest):
+    """Validate an existing access token.
+
+    Use this to restore a previously saved session.
+    """
+    resp = await handle_auth_validate(request.token)
+    if resp.status != 200:
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
     return resp.data
 
 

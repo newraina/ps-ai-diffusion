@@ -73,7 +73,7 @@ function AppContent({
           <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
           <div className="connection-buttons">
             <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
-              {loading ? 'Connecting...' : 'Connect to ComfyUI'}
+              {loading ? 'Connecting...' : 'Connect'}
             </Button>
             <Button size="s" variant="secondary" onClick={() => setSettingsOpen(true)}>
               Settings
@@ -121,17 +121,29 @@ function App() {
         settings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
         settings.comfyUrl,
       )
-      // In standalone mode, don't pass comfyUrl - let bridge use its default ComfyUI address
-      // In comfyui-extension mode, pass the ComfyUI URL for the bridge to connect to itself
-      const comfyUrlForBridge = settings.connectionMode === 'comfyui-extension'
-        ? settings.comfyUrl
-        : undefined
-      const status = await connect(
-        'local',
-        comfyUrlForBridge,
-        settings.authToken || undefined,
-      )
-      setConnection(status)
+
+      if (settings.backendType === 'cloud') {
+        // Cloud backend connection
+        const status = await connect(
+          'cloud',
+          undefined,
+          settings.cloudAccessToken || undefined,
+        )
+        setConnection(status)
+      } else {
+        // Local backend connection
+        // In standalone mode, don't pass comfyUrl - let bridge use its default ComfyUI address
+        // In comfyui-extension mode, pass the ComfyUI URL for the bridge to connect to itself
+        const comfyUrlForBridge = settings.connectionMode === 'comfyui-extension'
+          ? settings.comfyUrl
+          : undefined
+        const status = await connect(
+          'local',
+          comfyUrlForBridge,
+          settings.authToken || undefined,
+        )
+        setConnection(status)
+      }
     } catch {
       setError('Failed to connect')
     } finally {

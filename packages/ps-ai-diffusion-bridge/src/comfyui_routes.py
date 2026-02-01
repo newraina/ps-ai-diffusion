@@ -25,6 +25,9 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_auth_sign_in,
+    handle_auth_confirm,
+    handle_auth_validate,
 )
 
 API_PREFIX = "/api/ps-ai-diffusion-bridge"
@@ -119,4 +122,23 @@ if PromptServer is not None:
             model=data.get("model", ""),
         )
         resp = await handle_upscale(params)
+        return _json_response(resp)
+
+    # Cloud Authentication Endpoints
+
+    @routes.post(f"{API_PREFIX}/auth/sign-in")
+    async def auth_sign_in(request):
+        resp = await handle_auth_sign_in()
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/auth/confirm")
+    async def auth_confirm(request):
+        resp = await handle_auth_confirm()
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/auth/validate")
+    async def auth_validate(request):
+        data = await request.json()
+        token = data.get("token", "")
+        resp = await handle_auth_validate(token)
         return _json_response(resp)

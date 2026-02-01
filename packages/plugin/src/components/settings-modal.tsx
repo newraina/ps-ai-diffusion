@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@swc-react/button'
 import {
+  type BackendType,
   type ConnectionMode,
   type Settings,
   getSettings,
   saveSettings,
 } from '../services/settings'
-import { setBridgeMode, testConnection } from '../services/bridge-client'
+import {
+  type CloudUser,
+  setBridgeMode,
+  testConnection,
+  signIn,
+  authConfirm,
+  authValidate,
+  connect,
+} from '../services/bridge-client'
+import { openBrowser } from '../utils/uxp'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -21,6 +31,8 @@ interface UXPDialog extends HTMLDialogElement {
   }): Promise<string>
 }
 
+type CloudAuthStatus = 'idle' | 'signing_in' | 'waiting' | 'connected' | 'error'
+
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const dialogRef = useRef<UXPDialog>(null)
   const [settings, setSettings] = useState<Settings>(getSettings)
@@ -30,20 +42,133 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     message: string
   } | null>(null)
 
+  // Cloud auth state
+  const [cloudAuthStatus, setCloudAuthStatus] = useState<CloudAuthStatus>('idle')
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
+  const [cloudError, setCloudError] = useState<string | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
 
     if (isOpen) {
+      // Load settings and check cloud auth status
+      const currentSettings = getSettings()
+      setSettings(currentSettings)
+
+      if (currentSettings.backendType === 'cloud' && currentSettings.cloudAccessToken) {
+        validateCloudToken(currentSettings.cloudAccessToken)
+      }
+
       dialog.uxpShowModal({
         title: 'Settings',
         resize: 'none',
-        size: { width: 600, height: 400 },
+        size: { width: 600, height: 500 },
       }).then(() => {
         onClose()
       })
     }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
   }, [isOpen, onClose])
+
+  async function validateCloudToken(token: string) {
+    try {
+      // Apply bridge mode first
+      setBridgeMode(
+        settings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
+        settings.comfyUrl,
+      )
+
+      const result = await authValidate(token)
+      if (result.valid && result.user) {
+        setCloudUser(result.user)
+        setCloudAuthStatus('connected')
+      } else {
+        setCloudAuthStatus('idle')
+        setCloudError(result.error || 'Token invalid')
+      }
+    } catch (e) {
+      setCloudAuthStatus('idle')
+      setCloudError(String(e))
+    }
+  }
+
+  async function handleCloudSignIn() {
+    setCloudAuthStatus('signing_in')
+    setCloudError(null)
+
+    // Apply bridge mode first
+    setBridgeMode(
+      settings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
+      settings.comfyUrl,
+    )
+
+    try {
+      const result = await signIn()
+      // Open browser for user to complete sign-in
+      openBrowser(result.sign_in_url)
+      setCloudAuthStatus('waiting')
+
+      // Start polling for confirmation
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const confirmResult = await authConfirm()
+          if (confirmResult.status === 'authorized' && confirmResult.token && confirmResult.user) {
+            // Success!
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            setCloudUser(confirmResult.user)
+            setCloudAuthStatus('connected')
+            setSettings(prev => ({
+              ...prev,
+              cloudAccessToken: confirmResult.token!,
+            }))
+          } else if (confirmResult.status === 'timeout' || confirmResult.status === 'error') {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            setCloudAuthStatus('error')
+            setCloudError(confirmResult.error || 'Sign-in failed')
+          }
+          // status === 'pending' means keep polling
+        } catch (e) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          setCloudAuthStatus('error')
+          setCloudError(String(e))
+        }
+      }, 2000)
+    } catch (e) {
+      setCloudAuthStatus('error')
+      setCloudError(String(e))
+    }
+  }
+
+  function handleCloudSignOut() {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+    setCloudUser(null)
+    setCloudAuthStatus('idle')
+    setCloudError(null)
+    setSettings(prev => ({
+      ...prev,
+      cloudAccessToken: '',
+    }))
+  }
 
   async function handleSave() {
     setTesting(true)
@@ -56,27 +181,50 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     )
 
     try {
-      const result = await testConnection()
-      if (result.reachable) {
-        setTestResult({ success: true, message: 'Connection successful' })
+      if (settings.backendType === 'cloud') {
+        // For cloud, check if we have a valid token
+        if (!settings.cloudAccessToken || cloudAuthStatus !== 'connected') {
+          setTestResult({
+            success: false,
+            message: 'Please sign in to cloud service first',
+          })
+          setTesting(false)
+          return
+        }
+        // Connect to cloud backend
+        await connect('cloud', undefined, settings.cloudAccessToken)
+        setTestResult({ success: true, message: 'Connected to cloud service' })
         saveSettings(settings)
         dialogRef.current?.close('saved')
       } else {
-        setTestResult({
-          success: false,
-          message: result.error || 'Connection failed',
-        })
+        // Local connection test
+        const result = await testConnection()
+        if (result.reachable) {
+          setTestResult({ success: true, message: 'Connection successful' })
+          saveSettings(settings)
+          dialogRef.current?.close('saved')
+        } else {
+          setTestResult({
+            success: false,
+            message: result.error || 'Connection failed',
+          })
+        }
       }
-    } catch {
-      setTestResult({ success: false, message: 'Failed to test connection' })
+    } catch (e) {
+      setTestResult({ success: false, message: String(e) })
     } finally {
       setTesting(false)
     }
   }
 
   function handleCancel() {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
     setSettings(getSettings())
     setTestResult(null)
+    setCloudError(null)
     dialogRef.current?.close('cancel')
   }
 
@@ -91,70 +239,175 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setSettings(newSettings)
   }
 
+  function handleBackendChange(backend: BackendType) {
+    setSettings(prev => ({ ...prev, backendType: backend }))
+    setTestResult(null)
+  }
+
+  const isCloudMode = settings.backendType === 'cloud'
+
   return (
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
+        {/* Backend Type Selection */}
         <div className="form-field">
-          <label>Connection Mode</label>
-          <div className="radio-group">
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="connection-mode"
-                checked={settings.connectionMode === 'comfyui-extension'}
-                onChange={() => handleModeChange('comfyui-extension')}
-              />
-              <span>ComfyUI Extension</span>
-              <span className="radio-hint">Requires bridge installed in ComfyUI custom_nodes</span>
-            </label>
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="connection-mode"
-                checked={settings.connectionMode === 'standalone-bridge'}
-                onChange={() => handleModeChange('standalone-bridge')}
-              />
-              <span>Standalone Bridge</span>
-              <span className="radio-hint">Run bridge separately with python run.py</span>
-            </label>
+          <label>Backend</label>
+          <div className="backend-tabs">
+            <button
+              className={`backend-tab ${!isCloudMode ? 'active' : ''}`}
+              onClick={() => handleBackendChange('local')}
+            >
+              <span className="tab-label">Local</span>
+              <span className={`tab-status ${!isCloudMode && testResult?.success ? 'connected' : ''}`}>
+                {!isCloudMode && testResult?.success ? 'Connected' : 'Not connected'}
+              </span>
+            </button>
+            <button
+              className={`backend-tab ${isCloudMode ? 'active' : ''}`}
+              onClick={() => handleBackendChange('cloud')}
+            >
+              <span className="tab-label">Cloud Service</span>
+              <span className={`tab-status ${cloudAuthStatus === 'connected' ? 'connected' : ''}`}>
+                {cloudAuthStatus === 'connected' ? 'Connected' : 'Not connected'}
+              </span>
+            </button>
           </div>
         </div>
 
-        <div className="form-field">
-          <label htmlFor="comfy-url">
-            {settings.connectionMode === 'comfyui-extension' ? 'ComfyUI Server' : 'Bridge Server'}
-          </label>
-          <input
-            id="comfy-url"
-            type="text"
-            className="text-input"
-            value={settings.comfyUrl}
-            placeholder={settings.connectionMode === 'comfyui-extension' ? 'http://localhost:8188' : 'http://localhost:7860'}
-            onChange={(e) =>
-              setSettings((prev) => ({
-                ...prev,
-                comfyUrl: e.target.value,
-              }))
-            }
-          />
-        </div>
+        {/* Cloud Service Panel */}
+        {isCloudMode && (
+          <div className="cloud-panel">
+            {cloudAuthStatus === 'connected' && cloudUser ? (
+              <div className="cloud-user-info">
+                <div className="user-field">
+                  <span className="field-label">Account:</span>
+                  <span className="field-value">{cloudUser.name}</span>
+                </div>
+                <div className="user-field">
+                  <span className="field-label">Total generated:</span>
+                  <span className="field-value">{cloudUser.images_generated.toLocaleString()}</span>
+                </div>
+                <div className="user-field">
+                  <span className="field-label">Tokens remaining:</span>
+                  <span className="field-value credits">{cloudUser.credits.toLocaleString()}</span>
+                </div>
+                <div className="cloud-actions">
+                  <Button
+                    size="s"
+                    variant="secondary"
+                    onClick={() => openBrowser('https://www.interstice.cloud/user')}
+                  >
+                    View Account
+                  </Button>
+                  <Button
+                    size="s"
+                    variant="secondary"
+                    onClick={() => openBrowser('https://www.interstice.cloud/checkout/tokens5000')}
+                  >
+                    Buy Tokens
+                  </Button>
+                  <Button size="s" variant="secondary" onClick={handleCloudSignOut}>
+                    Sign Out
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="cloud-sign-in">
+                <p className="cloud-description">
+                  Generate images via interstice.cloud.
+                  No local installation or powerful hardware needed.
+                </p>
+                {cloudError && (
+                  <sp-body size="S" className="test-result error">
+                    {cloudError}
+                  </sp-body>
+                )}
+                {cloudAuthStatus === 'waiting' ? (
+                  <div className="waiting-message">
+                    <sp-body size="S">Waiting for sign-in to complete...</sp-body>
+                    <sp-body size="XS">Complete the sign-in in your browser, then return here.</sp-body>
+                  </div>
+                ) : (
+                  <Button
+                    size="s"
+                    variant="cta"
+                    onClick={handleCloudSignIn}
+                    disabled={cloudAuthStatus === 'signing_in'}
+                  >
+                    {cloudAuthStatus === 'signing_in' ? 'Starting...' : 'Sign In'}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-        <div className="form-field">
-          <label htmlFor="auth-token">Auth Token (optional)</label>
-          <input
-            id="auth-token"
-            type="password"
-            className="text-input"
-            value={settings.authToken}
-            placeholder="Enter token if required"
-            onChange={(e) =>
-              setSettings((prev) => ({
-                ...prev,
-                authToken: e.target.value,
-              }))
-            }
-          />
-        </div>
+        {/* Local Settings Panel */}
+        {!isCloudMode && (
+          <>
+            <div className="form-field">
+              <label>Connection Mode</label>
+              <div className="radio-group">
+                <label className="radio-label">
+                  <input
+                    type="radio"
+                    name="connection-mode"
+                    checked={settings.connectionMode === 'comfyui-extension'}
+                    onChange={() => handleModeChange('comfyui-extension')}
+                  />
+                  <span>ComfyUI Extension</span>
+                  <span className="radio-hint">Requires bridge installed in ComfyUI custom_nodes</span>
+                </label>
+                <label className="radio-label">
+                  <input
+                    type="radio"
+                    name="connection-mode"
+                    checked={settings.connectionMode === 'standalone-bridge'}
+                    onChange={() => handleModeChange('standalone-bridge')}
+                  />
+                  <span>Standalone Bridge</span>
+                  <span className="radio-hint">Run bridge separately with python run.py</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="comfy-url">
+                {settings.connectionMode === 'comfyui-extension' ? 'ComfyUI Server' : 'Bridge Server'}
+              </label>
+              <input
+                id="comfy-url"
+                type="text"
+                className="text-input"
+                value={settings.comfyUrl}
+                placeholder={settings.connectionMode === 'comfyui-extension' ? 'http://localhost:8188' : 'http://localhost:7860'}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    comfyUrl: e.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="auth-token">Auth Token (optional)</label>
+              <input
+                id="auth-token"
+                type="password"
+                className="text-input"
+                value={settings.authToken}
+                placeholder="Enter token if required"
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    authToken: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </>
+        )}
 
         {testResult && (
           <sp-body

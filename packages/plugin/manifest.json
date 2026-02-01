@@ -40,6 +40,10 @@
     "network": {
       "domains": "all"
     },
-    "localFileSystem": "request"
+    "localFileSystem": "request",
+    "launchProcess": {
+      "schemes": ["https", "http"],
+      "extensions": []
+    }
   }
 }

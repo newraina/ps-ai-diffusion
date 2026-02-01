@@ -29,11 +29,19 @@ function getApiUrl(path: string): string {
   return `${baseUrl}${apiPrefix}${path}`
 }
 
+export interface CloudUser {
+  id: string
+  name: string
+  credits: number
+  images_generated: number
+}
+
 export interface ConnectionStatus {
-  status: 'disconnected' | 'connecting' | 'connected' | 'error'
+  status: 'disconnected' | 'connecting' | 'connected' | 'error' | 'auth_pending'
   backend: 'local' | 'cloud'
   comfy_url: string
   error: string | null
+  user?: CloudUser // Only present for cloud backend when connected
 }
 
 export interface GenerateRequest {
@@ -195,5 +203,54 @@ export async function upscale(request: UpscaleRequest): Promise<GenerateResponse
     const error = await response.json()
     throw new Error(error.detail || error.error || 'Upscale failed')
   }
+  return response.json()
+}
+
+// Cloud Authentication APIs
+
+export interface SignInResponse {
+  sign_in_url: string
+  status: 'pending'
+}
+
+export interface AuthConfirmResponse {
+  status: 'pending' | 'authorized' | 'timeout' | 'error'
+  token?: string
+  user?: CloudUser
+  error?: string
+}
+
+export interface AuthValidateResponse {
+  valid: boolean
+  user?: CloudUser
+  error?: string
+}
+
+export async function signIn(): Promise<SignInResponse> {
+  const response = await fetch(getApiUrl('/auth/sign-in'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Sign-in failed')
+  }
+  return response.json()
+}
+
+export async function authConfirm(): Promise<AuthConfirmResponse> {
+  const response = await fetch(getApiUrl('/auth/confirm'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  return response.json()
+}
+
+export async function authValidate(token: string): Promise<AuthValidateResponse> {
+  const response = await fetch(getApiUrl('/auth/validate'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
   return response.json()
 }
