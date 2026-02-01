@@ -51,6 +51,8 @@ def build_txt2img_workflow(
     seed: int = -1,
     checkpoint: str = "",
     batch_size: int = 1,
+    sampler: str = "euler",
+    scheduler: str = "normal",
 ) -> tuple[dict, int]:
     """Build a simple txt2img workflow for ComfyUI.
 
@@ -100,8 +102,8 @@ def build_txt2img_workflow(
                 "seed": seed,
                 "steps": steps,
                 "cfg": cfg_scale,
-                "sampler_name": "euler",
-                "scheduler": "normal",
+                "sampler_name": sampler,
+                "scheduler": scheduler,
                 "denoise": 1.0,
                 "model": ["1", 0],
                 "positive": ["2", 0],
@@ -207,6 +209,8 @@ class ComfyClientManager:
         seed: int = -1,
         checkpoint: str = "",
         batch_size: int = 1,
+        sampler: str = "euler",
+        scheduler: str = "normal",
     ) -> str:
         """Submit a generation job and return job_id."""
         if not self._session or not self._is_connected:
@@ -225,6 +229,8 @@ class ComfyClientManager:
             seed=seed,
             checkpoint=checkpoint,
             batch_size=batch_size,
+            sampler=sampler,
+            scheduler=scheduler,
         )
 
         # Initialize job state

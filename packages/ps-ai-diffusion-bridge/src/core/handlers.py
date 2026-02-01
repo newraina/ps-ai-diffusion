@@ -35,6 +35,8 @@ class GenerateParams:
     seed: int = -1
     model: str = ""
     batch_size: int = 1
+    sampler: str = "euler"
+    scheduler: str = "normal"
 
 
 def get_comfy_url(request_url: Optional[str]) -> str:
@@ -119,6 +121,8 @@ async def handle_generate(params: GenerateParams) -> ApiResponse:
             seed=params.seed,
             checkpoint=params.model,
             batch_size=params.batch_size,
+            sampler=params.sampler,
+            scheduler=params.scheduler,
         )
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
     except Exception as e:
