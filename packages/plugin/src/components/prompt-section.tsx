@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { PromptInput } from './prompt-input'
 import { useGeneration } from '../contexts/generation-context'
+import { getSettings } from '../services/settings'
 
 interface PromptSectionProps {
   onSubmit?: () => void
@@ -28,24 +29,48 @@ function getLineHeightPx(textarea: HTMLTextAreaElement): number {
 }
 
 export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps) {
-  const MIN_PROMPT_ROWS = 2
+  const defaultPromptRows = Math.max(2, getSettings().promptLineCount || 2)
   // Keep a very high cap to avoid breaking layout with unbounded growth.
   const MAX_PROMPT_ROWS = 999
 
   const { prompt, setPrompt, negativePrompt, setNegativePrompt } = useGeneration()
-  const [promptRows, setPromptRows] = useState(MIN_PROMPT_ROWS)
+  const [minPromptRows, setMinPromptRows] = useState(defaultPromptRows)
+  const [promptRows, setPromptRows] = useState(defaultPromptRows)
   const [isDragging, setIsDragging] = useState(false)
   const sectionRef = useRef<HTMLDivElement>(null)
   const dragStateRef = useRef({
     startY: 0,
-    startRows: MIN_PROMPT_ROWS,
+    startRows: defaultPromptRows,
     lineHeight: 18,
     pointerId: null as number | null,
     mode: 'pointer' as 'pointer' | 'mouse',
   })
   const handleRef = useRef<HTMLDivElement>(null)
-  // TODO: Add toggle for negative prompt section
-  const [showNegative, _setShowNegative] = useState(false)
+  const [showNegative, setShowNegative] = useState(() => getSettings().showNegativePrompt)
+
+  useEffect(() => {
+    const updateFromSettings = (event?: Event) => {
+      const customEvent = event as CustomEvent | undefined
+      const detail = customEvent?.detail as { showNegativePrompt?: boolean; promptLineCount?: number } | undefined
+      const nextValue = typeof detail?.showNegativePrompt === 'boolean'
+        ? detail.showNegativePrompt
+        : getSettings().showNegativePrompt
+      setShowNegative(nextValue)
+
+      const nextRows = typeof detail?.promptLineCount === 'number'
+        ? detail.promptLineCount
+        : getSettings().promptLineCount
+      const safeRows = Math.max(2, nextRows || 2)
+      setMinPromptRows(safeRows)
+      setPromptRows(prev => Math.max(prev, safeRows))
+    }
+
+    updateFromSettings()
+    window.addEventListener('ps-ai-diffusion-settings-updated', updateFromSettings as EventListener)
+    return () => {
+      window.removeEventListener('ps-ai-diffusion-settings-updated', updateFromSettings as EventListener)
+    }
+  }, [])
 
   const beginDrag = useCallback((clientY: number, mode: 'pointer' | 'mouse', pointerId?: number) => {
     const textarea = sectionRef.current?.querySelector('textarea')
@@ -86,7 +111,7 @@ export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps
   useEffect(() => {
     if (!isDragging) return
 
-    const clampRows = (rows: number) => Math.max(MIN_PROMPT_ROWS, Math.min(MAX_PROMPT_ROWS, rows))
+    const clampRows = (rows: number) => Math.max(minPromptRows, Math.min(MAX_PROMPT_ROWS, rows))
 
     const updateFromClientY = (clientY: number) => {
       const deltaY = clientY - dragStateRef.current.startY
@@ -152,6 +177,7 @@ export function PromptSection({ onSubmit, disabled = false }: PromptSectionProps
         maxRows={MAX_PROMPT_ROWS}
         onSubmit={onSubmit}
         disabled={disabled}
+        enableAutocomplete
       />
       <div
         ref={handleRef}

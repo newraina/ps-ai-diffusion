@@ -5,7 +5,7 @@ export const workspaceLabels: Record<Workspace, string> = {
   upscaling: 'Upscale',
   live: 'Live',
   animation: 'Animation',
-  custom: 'Graph',
+  custom: 'Custom Graph',
 }
 
 export const mockHistory: HistoryGroup[] = [

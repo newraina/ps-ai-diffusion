@@ -16,9 +16,33 @@ const SAMPLER_PRESETS: Record<string, { sampler: string; scheduler: string }> = 
   'Flux 2 - Euler': { sampler: 'euler', scheduler: 'flux2' },
 }
 
+export const SAMPLER_OPTIONS = [
+  'euler',
+  'euler_ancestral',
+  'dpmpp_2m',
+  'dpmpp_2m_sde_gpu',
+  'dpmpp_sde_gpu',
+  'uni_pc_bh2',
+  'lcm',
+]
+
+export const SCHEDULER_OPTIONS = [
+  'normal',
+  'karras',
+  'gits',
+  'beta',
+  'sgm_uniform',
+  'simple',
+  'flux2',
+]
+
 /**
  * Resolve a sampler preset name to actual sampler/scheduler values.
  */
 export function resolveStyleSampler(presetName: string): { sampler: string; scheduler: string } {
   return SAMPLER_PRESETS[presetName] || { sampler: 'euler', scheduler: 'normal' }
+}
+
+export function listSamplerPresets(): string[] {
+  return Object.keys(SAMPLER_PRESETS)
 }

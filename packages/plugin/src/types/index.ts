@@ -94,6 +94,34 @@ export interface Region {
   isVisible: boolean
 }
 
+export interface GenerationSnapshot {
+  prompt: string
+  negativePrompt: string
+  strength: number
+  inpaintMode: InpaintMode
+  inpaintFill: InpaintFillMode
+  inpaintContext: InpaintContext
+  batchSize: number
+  seed: number
+  fixedSeed: boolean
+  style: Style | null
+  width: number
+  height: number
+  steps: number
+  cfgScale: number
+  sampler: string
+  scheduler: string
+  useStyleDefaults: boolean
+  controlLayers: ControlLayer[]
+  regions: Region[]
+}
+
+export interface QueueItem {
+  id: string
+  createdAt: string
+  snapshot: GenerationSnapshot
+}
+
 // Generation state
 export interface GenerationState {
   workspace: Workspace
@@ -110,8 +138,16 @@ export interface GenerationState {
   batchSize: number
   seed: number
   fixedSeed: boolean
+  width: number
+  height: number
+  steps: number
+  cfgScale: number
+  sampler: string
+  scheduler: string
+  useStyleDefaults: boolean
   controlLayers: ControlLayer[]
   regions: Region[]
+  queue: QueueItem[]
 }
 
 // Queue state

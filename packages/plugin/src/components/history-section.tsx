@@ -3,6 +3,7 @@ import { HistoryGroup } from './history-group'
 import { useHistory } from '../contexts/history-context'
 import { useGeneration } from '../contexts/generation-context'
 import { useStyles } from '../contexts/styles-context'
+import { getSettings } from '../services/settings'
 
 interface ContextMenuState {
   visible: boolean
@@ -86,6 +87,13 @@ export function HistorySection() {
   }, [groups, contextMenu, closeContextMenu])
 
   const handleDiscard = useCallback(() => {
+    const settings = getSettings()
+    if (settings.confirmDiscardImage) {
+      if (!confirm('Discard this image?')) {
+        closeContextMenu()
+        return
+      }
+    }
     discardImage(contextMenu.jobId, contextMenu.index)
     closeContextMenu()
   }, [discardImage, contextMenu, closeContextMenu])

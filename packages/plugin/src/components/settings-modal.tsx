@@ -325,9 +325,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
-        {/* General Settings */}
+        {/* Interface Settings */}
         <div className="form-field" style={{ marginBottom: 20 }}>
-          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>General</h3>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Interface</h3>
           
           <div className="checkbox-field" style={{ marginBottom: 8 }}>
             <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -349,6 +349,129 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               />
               <span>Confirm Discard Image</span>
             </label>
+          </div>
+
+          <div className="checkbox-field" style={{ marginTop: 8 }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={settings.enablePromptTranslation}
+                onChange={e => setSettings(prev => ({ ...prev, enablePromptTranslation: e.target.checked }))}
+              />
+              <span>Enable Prompt Translation</span>
+            </label>
+          </div>
+
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <span className="row-label">Translation language</span>
+            <select
+              className="text-input"
+              value={settings.promptTranslation}
+              disabled={!settings.enablePromptTranslation}
+              onChange={e => setSettings(prev => ({ ...prev, promptTranslation: e.target.value }))}
+            >
+              <option value="en">English</option>
+              <option value="zh">Chinese</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+            </select>
+          </div>
+
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <span className="row-label">Prompt lines</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.promptLineCount}
+              min={2}
+              max={8}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, promptLineCount: Number(e.target.value) }))
+              }
+            />
+          </div>
+        </div>
+
+        {/* Diffusion Settings */}
+        <div className="form-field" style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Diffusion</h3>
+          <div className="form-row">
+            <span className="row-label">Selection padding</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.selectionPadding}
+              min={0}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, selectionPadding: Number(e.target.value) }))
+              }
+            />
+          </div>
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <span className="row-label">Selection grow</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.selectionGrow}
+              min={0}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, selectionGrow: Number(e.target.value) }))
+              }
+            />
+          </div>
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <span className="row-label">Selection feather</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.selectionFeather}
+              min={0}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, selectionFeather: Number(e.target.value) }))
+              }
+            />
+          </div>
+        </div>
+
+        {/* Performance Settings */}
+        <div className="form-field" style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Performance</h3>
+          <div className="checkbox-field" style={{ marginBottom: 8 }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={settings.autoResize}
+                onChange={e => setSettings(prev => ({ ...prev, autoResize: e.target.checked }))}
+              />
+              <span>Auto resize oversized inputs</span>
+            </label>
+          </div>
+          <div className="form-row">
+            <span className="row-label">Max pixels</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.maxPixels}
+              min={1000000}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, maxPixels: Number(e.target.value) }))
+              }
+            />
+          </div>
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <span className="row-label">Resolution multiplier</span>
+            <input
+              type="number"
+              className="text-input"
+              value={settings.resolutionMultiplier}
+              min={0.5}
+              step={0.1}
+              onChange={e =>
+                setSettings(prev => ({ ...prev, resolutionMultiplier: Number(e.target.value) }))
+              }
+            />
           </div>
         </div>
 
@@ -572,6 +695,40 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               )}
             </div>
           </>
+        )}
+
+        {/* Models & Updates */}
+        <div className="form-field" style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Models & Updates</h3>
+          <sp-body size="S" className="settings-note">
+            Model installation and update flows are not available in Photoshop yet.
+            Use ComfyUI Manager or the Krita plugin for full management.
+          </sp-body>
+          <div className="settings-actions">
+            <Button
+              size="s"
+              variant="secondary"
+              onClick={() => openBrowser('https://docs.interstice.cloud')}
+            >
+              Model Guide
+            </Button>
+            <Button
+              size="s"
+              variant="secondary"
+              onClick={() => openBrowser('https://github.com/Acly/krita-ai-diffusion/releases')}
+            >
+              Check for Updates
+            </Button>
+          </div>
+        </div>
+
+        {cloudMeta?.newsText && (
+          <div className="form-field" style={{ marginBottom: 20 }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>News</h3>
+            <sp-body size="S" className="settings-note">
+              {cloudMeta.newsText}
+            </sp-body>
+          </div>
         )}
 
         {testResult && (

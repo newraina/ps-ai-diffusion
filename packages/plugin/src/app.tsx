@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Button } from '@swc-react/button'
 import { GeneratePanel } from './panels/generate-panel'
 import { UpscalePanel } from './panels/upscale-panel'
+import { LivePanel } from './panels/live-panel'
+import { AnimationPanel } from './panels/animation-panel'
+import { CustomPanel } from './panels/custom-panel'
 import { GenerationProvider, useGeneration } from './contexts/generation-context'
 import { HistoryProvider } from './contexts/history-context'
 import { StylesProvider } from './contexts/styles-context'
@@ -48,6 +51,30 @@ function AppContent({
       case 'upscaling':
         return (
           <UpscalePanel
+            isConnected={isConnected}
+            onOpenSettings={() => setSettingsOpen(true)}
+            connectionStatus={connection?.status}
+          />
+        )
+      case 'live':
+        return (
+          <LivePanel
+            isConnected={isConnected}
+            onOpenSettings={() => setSettingsOpen(true)}
+            connectionStatus={connection?.status}
+          />
+        )
+      case 'animation':
+        return (
+          <AnimationPanel
+            isConnected={isConnected}
+            onOpenSettings={() => setSettingsOpen(true)}
+            connectionStatus={connection?.status}
+          />
+        )
+      case 'custom':
+        return (
+          <CustomPanel
             isConnected={isConnected}
             onOpenSettings={() => setSettingsOpen(true)}
             connectionStatus={connection?.status}

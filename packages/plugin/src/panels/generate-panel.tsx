@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Button } from '@swc-react/button'
 import { StyleSelector } from '../components/style-selector'
 import { PromptSection } from '../components/prompt-section'
@@ -9,6 +9,7 @@ import { HistorySection } from '../components/history-section'
 import { RegionSection } from '../components/sections/region-section'
 import { ControlLayerSection } from '../components/sections/control-layer-section'
 import { InpaintSettings } from '../components/sections/inpaint-settings'
+import { GenerationSettings } from '../components/sections/generation-settings'
 import { useGeneration } from '../contexts/generation-context'
 import { useHistory } from '../contexts/history-context'
 import {
@@ -21,7 +22,7 @@ import { hasActiveDocument, getDocumentImageBase64, getLayerImageBase64 } from '
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import { openBrowser } from '../utils/uxp'
-import type { HistoryGroup, HistoryImage } from '../types'
+import type { GenerationSnapshot, HistoryGroup, HistoryImage, QueueItem } from '../types'
 
 interface GeneratePanelProps {
   isConnected: boolean
@@ -38,9 +39,26 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     strength,
     batchSize,
     style,
+    seed,
+    fixedSeed,
+    width,
+    height,
+    steps,
+    cfgScale,
+    sampler,
+    scheduler,
+    useStyleDefaults,
+    inpaintMode,
+    inpaintFill,
+    inpaintContext,
     isGenerating,
     setIsGenerating,
     setProgress,
+    controlLayers,
+    regions,
+    queue,
+    setQueue,
+    enqueueJob,
     addRegion,
     addControlLayer,
   } = useGeneration()
@@ -50,25 +68,75 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
   // Track current job for cancellation
   const currentJobRef = useRef<string | null>(null)
   const cancelledRef = useRef(false)
+  const queueRef = useRef(queue)
 
-  const handleGenerate = useCallback(async () => {
-    // Handle cancel
-    if (isGenerating && currentJobRef.current) {
-      cancelledRef.current = true
-      try {
-        await cancelJob(currentJobRef.current)
-      } catch (error) {
-        console.error('Failed to cancel job:', error)
+  useEffect(() => {
+    queueRef.current = queue
+  }, [queue])
+
+  const buildSnapshot = useCallback((): GenerationSnapshot => ({
+    prompt,
+    negativePrompt,
+    strength,
+    inpaintMode,
+    inpaintFill,
+    inpaintContext,
+    batchSize,
+    seed,
+    fixedSeed,
+    style,
+    width,
+    height,
+    steps,
+    cfgScale,
+    sampler,
+    scheduler,
+    useStyleDefaults,
+    controlLayers,
+    regions,
+  }), [
+    prompt,
+    negativePrompt,
+    strength,
+    inpaintMode,
+    inpaintFill,
+    inpaintContext,
+    batchSize,
+    seed,
+    fixedSeed,
+    style,
+    width,
+    height,
+    steps,
+    cfgScale,
+    sampler,
+    scheduler,
+    useStyleDefaults,
+    controlLayers,
+    regions,
+  ])
+
+  const takeNextQueueItem = useCallback(() => {
+    const [next, ...rest] = queueRef.current
+    if (!next) return null
+    setQueue(rest)
+    return next
+  }, [setQueue])
+
+  const runGeneration = useCallback(async (snapshot: GenerationSnapshot) => {
+    if (!snapshot.prompt.trim()) {
+      const next = takeNextQueueItem()
+      if (next) {
+        await runGeneration(next.snapshot)
       }
-      setIsGenerating(false)
-      setProgress(0)
-      currentJobRef.current = null
       return
     }
 
-    if (!prompt.trim()) return
     if (!hasActiveDocument()) {
       alert('Please open a document first')
+      setIsGenerating(false)
+      setProgress(0)
+      currentJobRef.current = null
       return
     }
 
@@ -77,8 +145,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     cancelledRef.current = false
 
     try {
-      // Check if we're in refine mode (strength < 100)
-      const isRefineMode = strength < 100
+      const isRefineMode = snapshot.strength < 100
       let imageBase64: string | undefined
 
       if (isRefineMode) {
@@ -90,35 +157,42 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         }
       }
 
-      // Apply style configuration
-      const finalPrompt = style
-        ? applyStylePrompt(style.style_prompt, prompt)
-        : prompt
-      const finalNegative = style
-        ? mergeNegativePrompts(style.negative_prompt, negativePrompt)
-        : negativePrompt
-      const checkpoint = style ? getStyleCheckpoint(style) : ''
-      const { sampler, scheduler } = style
-        ? resolveStyleSampler(style.sampler)
+      const finalPrompt = snapshot.style
+        ? applyStylePrompt(snapshot.style.style_prompt, snapshot.prompt)
+        : snapshot.prompt
+      const finalNegative = snapshot.style
+        ? mergeNegativePrompts(snapshot.style.negative_prompt, snapshot.negativePrompt)
+        : snapshot.negativePrompt
+      const checkpoint = snapshot.style ? getStyleCheckpoint(snapshot.style) : ''
+      const resolvedStyleSampler = snapshot.style
+        ? resolveStyleSampler(snapshot.style.sampler)
         : { sampler: 'euler', scheduler: 'normal' }
-      const cfgScale = style?.cfg_scale ?? 7.0
-      const steps = style?.steps ?? 20
+      const finalSampler = snapshot.useStyleDefaults && snapshot.style
+        ? resolvedStyleSampler.sampler
+        : snapshot.sampler
+      const finalScheduler = snapshot.useStyleDefaults && snapshot.style
+        ? resolvedStyleSampler.scheduler
+        : snapshot.scheduler
+      const finalCfgScale = snapshot.useStyleDefaults && snapshot.style
+        ? snapshot.style.cfg_scale
+        : snapshot.cfgScale
+      const finalSteps = snapshot.useStyleDefaults && snapshot.style
+        ? snapshot.style.steps
+        : snapshot.steps
 
-      // Process Control Layers
-      const activeControlLayers = controlLayers.filter(l => l.isEnabled && l.layerId !== null)
+      const activeControlLayers = snapshot.controlLayers.filter(l => l.isEnabled && l.layerId !== null)
       const controlNetArgs = []
-      
+
       if (activeControlLayers.length > 0) {
         setProgress(0, 'Processing control layers...')
         for (const layer of activeControlLayers) {
           try {
-             // We know layerId is not null because of the filter
-             const image = await getLayerImageBase64(layer.layerId!)
-             controlNetArgs.push({
-               mode: layer.mode,
-               image: image,
-               strength: layer.strength,
-             })
+            const image = await getLayerImageBase64(layer.layerId!)
+            controlNetArgs.push({
+              mode: layer.mode,
+              image: image,
+              strength: layer.strength,
+            })
           } catch (e) {
             console.error(`Failed to get image for control layer ${layer.layerName}:`, e)
             throw new Error(`Failed to process control layer "${layer.layerName}"`)
@@ -126,31 +200,29 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         }
       }
 
-      // Submit generation job
       setProgress(0, 'Submitting...')
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
-        width: 512,
-        height: 512,
-        batch_size: batchSize,
+        width: snapshot.width,
+        height: snapshot.height,
+        batch_size: snapshot.batchSize,
         model: checkpoint,
-        sampler,
-        scheduler,
-        cfg_scale: cfgScale,
-        steps,
+        sampler: finalSampler,
+        scheduler: finalScheduler,
+        cfg_scale: finalCfgScale,
+        steps: finalSteps,
+        seed: snapshot.fixedSeed ? snapshot.seed : -1,
         control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
-        // img2img params (only included when refining)
         ...(isRefineMode && {
           image: imageBase64,
-          strength: strength / 100,  // Convert 0-100 to 0.0-1.0
+          strength: snapshot.strength / 100,
         }),
       })
 
       const jobId = response.job_id
       currentJobRef.current = jobId
 
-      // Poll for job status
       let finished = false
       while (!finished && !cancelledRef.current) {
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
@@ -186,49 +258,56 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
             }
             throw new Error(status.error || 'Generation failed')
           case 'interrupted':
-            // User cancelled
             finished = true
             break
         }
       }
 
       if (cancelledRef.current) {
+        const next = takeNextQueueItem()
+        if (next) {
+          await runGeneration(next.snapshot)
+        }
         return
       }
 
-      // Fetch generated images
       const imagesResponse = await getJobImages(jobId)
 
       if (imagesResponse.images.length === 0) {
         throw new Error('No images generated')
       }
 
-      // Add all images to history (user will select/apply from there)
       const historyImages: HistoryImage[] = imagesResponse.images.map((img, i) => ({
         index: i,
-        thumbnail: `data:image/png;base64,${img}`, // Add data URL prefix for img src
-        applied: false, // Not applied until user clicks Apply
+        thumbnail: `data:image/png;base64,${img}`,
+        applied: false,
         seed: imagesResponse.seeds[i],
       }))
 
       const historyGroup: HistoryGroup = {
         job_id: jobId,
         timestamp: new Date().toISOString(),
-        prompt,
-        negative_prompt: negativePrompt,
-        strength,
-        style_id: style?.id ?? '',
+        prompt: snapshot.prompt,
+        negative_prompt: snapshot.negativePrompt,
+        strength: snapshot.strength,
+        style_id: snapshot.style?.id ?? '',
         images: historyImages,
       }
 
       addGenerationResult(historyGroup)
 
       setProgress(1, 'Done!')
-      setTimeout(() => {
-        setIsGenerating(false)
-        setProgress(0)
-        currentJobRef.current = null
-      }, 1000)
+      currentJobRef.current = null
+
+      const next = takeNextQueueItem()
+      if (next) {
+        await runGeneration(next.snapshot)
+      } else {
+        setTimeout(() => {
+          setIsGenerating(false)
+          setProgress(0)
+        }, 600)
+      }
 
     } catch (error) {
       console.error('Generation failed:', error)
@@ -238,17 +317,47 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       alert(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }, [
-    prompt,
-    negativePrompt,
-    strength,
-    batchSize,
-    style,
-    controlLayers,
-    isGenerating,
+    addGenerationResult,
     setIsGenerating,
     setProgress,
-    addGenerationResult,
+    takeNextQueueItem,
   ])
+
+  const handleGenerate = useCallback(async () => {
+    if (isGenerating && currentJobRef.current) {
+      cancelledRef.current = true
+      try {
+        await cancelJob(currentJobRef.current)
+      } catch (error) {
+        console.error('Failed to cancel job:', error)
+      }
+      setIsGenerating(false)
+      setProgress(0)
+      currentJobRef.current = null
+      return
+    }
+
+    if (!prompt.trim()) return
+    await runGeneration(buildSnapshot())
+  }, [
+    buildSnapshot,
+    isGenerating,
+    prompt,
+    runGeneration,
+    setIsGenerating,
+    setProgress,
+  ])
+
+  const handleQueueCurrent = useCallback(() => {
+    if (!prompt.trim()) return
+    const snapshot = buildSnapshot()
+    const item: QueueItem = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      snapshot,
+    }
+    enqueueJob(item)
+  }, [prompt, buildSnapshot, enqueueJob])
 
   return (
     <div className="generate-panel">
@@ -263,16 +372,19 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       
       <ControlLayerSection />
       
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div className="inline-actions">
         <Button size="s" variant="secondary" onClick={addControlLayer}>Add Control</Button>
         <Button size="s" variant="secondary" onClick={addRegion}>Add Region</Button>
       </div>
 
       <StrengthSlider />
       <InpaintSettings />
+      <GenerationSettings />
 
       <GenerateButton
         onClick={handleGenerate}
+        onQueueCurrent={handleQueueCurrent}
+        queueDisabled={!prompt.trim()}
         disabled={!isConnected || !prompt.trim()}
       />
       <ProgressBar />

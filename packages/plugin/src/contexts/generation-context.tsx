@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import type { GenerationState, Workspace, Style, InpaintMode, InpaintFillMode, InpaintContext, ControlLayer, Region } from '../types'
+import type { GenerationState, Workspace, Style, InpaintMode, InpaintFillMode, InpaintContext, ControlLayer, Region, QueueItem } from '../types'
 
 interface GenerationContextValue extends GenerationState {
   setWorkspace: (workspace: Workspace) => void
@@ -14,6 +14,13 @@ interface GenerationContextValue extends GenerationState {
   setSeed: (seed: number) => void
   setFixedSeed: (fixed: boolean) => void
   randomizeSeed: () => void
+  setWidth: (width: number) => void
+  setHeight: (height: number) => void
+  setSteps: (steps: number) => void
+  setCfgScale: (cfgScale: number) => void
+  setSampler: (sampler: string) => void
+  setScheduler: (scheduler: string) => void
+  setUseStyleDefaults: (useDefaults: boolean) => void
   setControlLayers: (layers: ControlLayer[]) => void
   addControlLayer: () => void
   updateControlLayer: (id: string, updates: Partial<ControlLayer>) => void
@@ -22,6 +29,10 @@ interface GenerationContextValue extends GenerationState {
   addRegion: () => void
   updateRegion: (id: string, updates: Partial<Region>) => void
   removeRegion: (id: string) => void
+  setQueue: (items: QueueItem[]) => void
+  enqueueJob: (item: QueueItem) => void
+  removeQueueItem: (id: string) => void
+  clearQueue: () => void
   setProgress: (progress: number, text?: string) => void
   setIsGenerating: (generating: boolean) => void
 }
@@ -41,8 +52,16 @@ const defaultState: GenerationState = {
   batchSize: 4,
   seed: Math.floor(Math.random() * 2147483647),
   fixedSeed: false,
+  width: 512,
+  height: 512,
+  steps: 20,
+  cfgScale: 7.0,
+  sampler: 'euler',
+  scheduler: 'normal',
+  useStyleDefaults: true,
   controlLayers: [],
   regions: [],
+  queue: [],
 }
 
 const GenerationContext = createContext<GenerationContextValue | null>(null)
@@ -96,6 +115,34 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
 
   const randomizeSeed = useCallback(() => {
     setState(s => ({ ...s, seed: Math.floor(Math.random() * 2147483647) }))
+  }, [])
+
+  const setWidth = useCallback((width: number) => {
+    setState(s => ({ ...s, width }))
+  }, [])
+
+  const setHeight = useCallback((height: number) => {
+    setState(s => ({ ...s, height }))
+  }, [])
+
+  const setSteps = useCallback((steps: number) => {
+    setState(s => ({ ...s, steps }))
+  }, [])
+
+  const setCfgScale = useCallback((cfgScale: number) => {
+    setState(s => ({ ...s, cfgScale }))
+  }, [])
+
+  const setSampler = useCallback((sampler: string) => {
+    setState(s => ({ ...s, sampler }))
+  }, [])
+
+  const setScheduler = useCallback((scheduler: string) => {
+    setState(s => ({ ...s, scheduler }))
+  }, [])
+
+  const setUseStyleDefaults = useCallback((useStyleDefaults: boolean) => {
+    setState(s => ({ ...s, useStyleDefaults }))
   }, [])
 
   const setControlLayers = useCallback((controlLayers: ControlLayer[]) => {
@@ -160,6 +207,26 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  const setQueue = useCallback((queue: QueueItem[]) => {
+    setState(s => ({ ...s, queue }))
+  }, [])
+
+  const enqueueJob = useCallback((item: QueueItem) => {
+    setState(s => ({ ...s, queue: [...s.queue, item] }))
+  }, [])
+
+  const removeQueueItem = useCallback((id: string) => {
+    setState(s => ({
+      ...s,
+      queue: s.queue.filter(item => item.id !== id),
+    }))
+  }, [])
+
+  const clearQueue = useCallback(() => {
+    setState(s => ({ ...s, queue: [] }))
+  }, [])
+
+
   const setProgress = useCallback((progress: number, progressText = '') => {
     setState(s => ({ ...s, progress, progressText }))
   }, [])
@@ -184,6 +251,13 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
         setSeed,
         setFixedSeed,
         randomizeSeed,
+        setWidth,
+        setHeight,
+        setSteps,
+        setCfgScale,
+        setSampler,
+        setScheduler,
+        setUseStyleDefaults,
         setControlLayers,
         addControlLayer,
         updateControlLayer,
@@ -192,6 +266,10 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
         addRegion,
         updateRegion,
         removeRegion,
+        setQueue,
+        enqueueJob,
+        removeQueueItem,
+        clearQueue,
         setProgress,
         setIsGenerating,
       }}
