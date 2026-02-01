@@ -57,6 +57,7 @@ interface Folder {
 interface File {
   nativePath: string
   write: (data: ArrayBuffer, options?: { format?: unknown }) => Promise<void>
+  read: (options?: { format?: unknown }) => Promise<ArrayBuffer | string>
 }
 
 interface PhotoshopCore {
@@ -208,6 +209,111 @@ export async function placeImageAsLayer(
  */
 export function hasActiveDocument(): boolean {
   return app.activeDocument !== null
+}
+
+/**
+ * Maximum input image size for upscaling (longest edge in pixels).
+ */
+const MAX_UPSCALE_INPUT_SIZE = 2048
+
+/**
+ * Get the active document's flattened image as base64 PNG.
+ * This captures all visible layers merged together.
+ */
+export async function getDocumentImageBase64(): Promise<string> {
+  const doc = app.activeDocument
+  if (!doc) {
+    throw new Error('No active document')
+  }
+
+  // Check image size
+  const longestSide = Math.max(doc.width, doc.height)
+  if (longestSide > MAX_UPSCALE_INPUT_SIZE) {
+    throw new Error(
+      `Image too large (${longestSide}px). Maximum is ${MAX_UPSCALE_INPUT_SIZE}px on longest side.`,
+    )
+  }
+
+  return new Promise((resolve, reject) => {
+    core.executeAsModal(
+      async () => {
+        try {
+          // Duplicate document to avoid modifying original
+          await action.batchPlay(
+            [
+              {
+                _obj: 'duplicate',
+                _target: [{ _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }],
+                name: 'temp_export',
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Flatten the duplicate
+          await action.batchPlay(
+            [
+              {
+                _obj: 'flattenImage',
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Get temporary folder and create file
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder()
+          const fileName = `export_${Date.now()}.png`
+          const tempFile = await tempFolder.createFile(fileName, { overwrite: true })
+          const fileToken = storage.localFileSystem.createSessionToken(tempFile)
+
+          // Export as PNG
+          await action.batchPlay(
+            [
+              {
+                _obj: 'save',
+                as: {
+                  _obj: 'PNGFormat',
+                  method: { _enum: 'PNGMethod', _value: 'moderate' },
+                },
+                in: { _path: fileToken, _kind: 'local' },
+                copy: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Close duplicate without saving
+          await action.batchPlay(
+            [
+              {
+                _obj: 'close',
+                saving: { _enum: 'yesNo', _value: 'no' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Read file as ArrayBuffer and convert to base64
+          const arrayBuffer = await tempFile.read({ format: storage.formats.binary })
+          const bytes = new Uint8Array(arrayBuffer as ArrayBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64 = btoa(binary)
+
+          resolve(base64)
+        } catch (error) {
+          reject(error)
+        }
+      },
+      { commandName: 'Export Document' },
+    )
+  })
 }
 
 /**
