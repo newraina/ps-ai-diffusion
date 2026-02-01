@@ -801,3 +801,39 @@ button:disabled {
   background: #444;
   margin: 4px 0;
 }
+
+/* ==================== */
+/* Upscale Panel */
+/* ==================== */
+
+.upscale-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.upscale-panel > * + * {
+  margin-top: 8px;
+}
+
+.upscale-options {
+  padding: 12px 0;
+}
+
+.upscale-options sp-label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.factor-buttons {
+  display: flex;
+}
+
+.factor-buttons > * + * {
+  margin-left: 8px;
+}
+
+.upscale-button {
+  width: 100%;
+}
