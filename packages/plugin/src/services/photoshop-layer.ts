@@ -317,6 +317,133 @@ export async function getDocumentImageBase64(): Promise<string> {
 }
 
 /**
+ * Get a specific layer's image as base64 PNG.
+ */
+export async function getLayerImageBase64(layerId: number): Promise<string> {
+  const doc = app.activeDocument
+  if (!doc) {
+    throw new Error('No active document')
+  }
+
+  // Find the layer
+  // Note: This simple search only finds top-level layers. 
+  // If we need nested layers, we need a recursive search or use batchPlay to select by ID.
+  const layer = doc.layers.find(l => l.id === layerId)
+  if (!layer) {
+    throw new Error(`Layer ${layerId} not found`)
+  }
+
+  return new Promise((resolve, reject) => {
+    core.executeAsModal(
+      async () => {
+        try {
+          // 1. Select the layer
+          await action.batchPlay(
+            [
+              {
+                _obj: 'select',
+                _target: [{ _ref: 'layer', _id: layerId }],
+                makeVisible: false,
+                layerID: [layerId],
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 2. Duplicate to new document to isolate it
+          // "Duplicate Layer..." to a new document
+          await action.batchPlay(
+            [
+              {
+                _obj: 'duplicate',
+                _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }],
+                version: 5,
+                name: 'temp_layer_export',
+                document: {
+                    _obj: 'document',
+                    mode: { _enum: 'colorSpace', _value: 'RGBColor' },
+                    fill: { _enum: 'fillMode', _value: 'transparent' },
+                    name: 'temp_layer_doc'
+                },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Now the new document is active.
+          
+          // 3. Trim transparency (optional, but good for controlnet)
+          await action.batchPlay(
+            [
+              {
+                _obj: 'trim',
+                basedOn: { _enum: 'trimBasedOn', _value: 'transparency' },
+                top: true,
+                bottom: true,
+                left: true,
+                right: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 4. Save as PNG (same as getDocumentImageBase64)
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder()
+          const fileName = `layer_export_${Date.now()}.png`
+          const tempFile = await tempFolder.createFile(fileName, { overwrite: true })
+          const fileToken = storage.localFileSystem.createSessionToken(tempFile)
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'save',
+                as: {
+                  _obj: 'PNGFormat',
+                  method: { _enum: 'PNGMethod', _value: 'moderate' },
+                },
+                in: { _path: fileToken, _kind: 'local' },
+                copy: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 5. Close temp document
+          await action.batchPlay(
+            [
+              {
+                _obj: 'close',
+                saving: { _enum: 'yesNo', _value: 'no' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // 6. Read file
+          const arrayBuffer = await tempFile.read({ format: storage.formats.binary })
+          const bytes = new Uint8Array(arrayBuffer as ArrayBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64 = btoa(binary)
+
+          resolve(base64)
+        } catch (error) {
+          reject(error)
+        }
+      },
+      { commandName: 'Export Layer' },
+    )
+  })
+}
+
+/**
  * Get active document info.
  */
 export function getActiveDocumentInfo(): {
@@ -332,6 +459,32 @@ export function getActiveDocumentInfo(): {
     width: doc.width,
     height: doc.height,
   }
+}
+
+export interface LayerInfo {
+  id: number
+  name: string
+  kind: string
+  visible: boolean
+}
+
+/**
+ * Get all layers in the active document.
+ */
+export function getLayers(): LayerInfo[] {
+  const doc = app.activeDocument
+  if (!doc) return []
+  
+  // Note: This only gets top-level layers. 
+  // For nested layers, we'd need recursive traversal, but UXP API structure 
+  // for that depends on the specific Photoshop version/API level.
+  // For now, returning top-level layers is a good start.
+  return doc.layers.map(l => ({
+    id: l.id,
+    name: l.name,
+    kind: l.kind,
+    visible: l.visible,
+  }))
 }
 
 /**

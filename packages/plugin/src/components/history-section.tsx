@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { HistoryGroup } from './history-group'
 import { useHistory } from '../contexts/history-context'
+import { useGeneration } from '../contexts/generation-context'
+import { useStyles } from '../contexts/styles-context'
 
 interface ContextMenuState {
   visible: boolean
@@ -12,6 +14,8 @@ interface ContextMenuState {
 
 export function HistorySection() {
   const { groups, discardImage, clearHistory } = useHistory()
+  const { setPrompt, setSeed, setFixedSeed, setStyle } = useGeneration()
+  const { styles } = useStyles()
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -34,6 +38,35 @@ export function HistorySection() {
   const closeContextMenu = useCallback(() => {
     setContextMenu(prev => ({ ...prev, visible: false }))
   }, [])
+
+  const handleUsePrompt = useCallback(() => {
+    const group = groups.find(g => g.job_id === contextMenu.jobId)
+    if (group) {
+      setPrompt(group.prompt)
+    }
+    closeContextMenu()
+  }, [groups, contextMenu.jobId, setPrompt, closeContextMenu])
+
+  const handleUseSeed = useCallback(() => {
+    const group = groups.find(g => g.job_id === contextMenu.jobId)
+    if (group) {
+      const image = group.images[contextMenu.index]
+      setSeed(image.seed)
+      setFixedSeed(true)
+    }
+    closeContextMenu()
+  }, [groups, contextMenu, setSeed, setFixedSeed, closeContextMenu])
+
+  const handleUseStyle = useCallback(() => {
+    const group = groups.find(g => g.job_id === contextMenu.jobId)
+    if (group && group.style_id) {
+      const style = styles.find(s => s.id === group.style_id)
+      if (style) {
+        setStyle(style)
+      }
+    }
+    closeContextMenu()
+  }, [groups, contextMenu.jobId, styles, setStyle, closeContextMenu])
 
   const handleCopyPrompt = useCallback(() => {
     const group = groups.find(g => g.job_id === contextMenu.jobId)
@@ -84,6 +117,16 @@ export function HistorySection() {
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={e => e.stopPropagation()}
         >
+          <div className="context-menu-item" onClick={handleUsePrompt}>
+            Use Prompt
+          </div>
+          <div className="context-menu-item" onClick={handleUseSeed}>
+            Use Seed
+          </div>
+          <div className="context-menu-item" onClick={handleUseStyle}>
+            Use Style
+          </div>
+          <div className="context-menu-divider" />
           <div className="context-menu-item" onClick={handleCopyPrompt}>
             Copy Prompt
           </div>

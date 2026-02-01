@@ -1,10 +1,14 @@
 import { useCallback, useRef } from 'react'
+import { Button } from '@swc-react/button'
 import { StyleSelector } from '../components/style-selector'
 import { PromptSection } from '../components/prompt-section'
 import { StrengthSlider } from '../components/strength-slider'
 import { GenerateButton } from '../components/generate-button'
 import { ProgressBar } from '../components/progress-bar'
 import { HistorySection } from '../components/history-section'
+import { RegionSection } from '../components/sections/region-section'
+import { ControlLayerSection } from '../components/sections/control-layer-section'
+import { InpaintSettings } from '../components/sections/inpaint-settings'
 import { useGeneration } from '../contexts/generation-context'
 import { useHistory } from '../contexts/history-context'
 import {
@@ -13,7 +17,7 @@ import {
   getJobImages,
   cancelJob,
 } from '../services/bridge-client'
-import { hasActiveDocument, getDocumentImageBase64 } from '../services/photoshop-layer'
+import { hasActiveDocument, getDocumentImageBase64, getLayerImageBase64 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import { openBrowser } from '../utils/uxp'
@@ -37,6 +41,8 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     isGenerating,
     setIsGenerating,
     setProgress,
+    addRegion,
+    addControlLayer,
   } = useGeneration()
 
   const { addGenerationResult } = useHistory()
@@ -98,6 +104,28 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       const cfgScale = style?.cfg_scale ?? 7.0
       const steps = style?.steps ?? 20
 
+      // Process Control Layers
+      const activeControlLayers = controlLayers.filter(l => l.isEnabled && l.layerId !== null)
+      const controlNetArgs = []
+      
+      if (activeControlLayers.length > 0) {
+        setProgress(0, 'Processing control layers...')
+        for (const layer of activeControlLayers) {
+          try {
+             // We know layerId is not null because of the filter
+             const image = await getLayerImageBase64(layer.layerId!)
+             controlNetArgs.push({
+               mode: layer.mode,
+               image: image,
+               strength: layer.strength,
+             })
+          } catch (e) {
+            console.error(`Failed to get image for control layer ${layer.layerName}:`, e)
+            throw new Error(`Failed to process control layer "${layer.layerName}"`)
+          }
+        }
+      }
+
       // Submit generation job
       setProgress(0, 'Submitting...')
       const response = await generate({
@@ -111,6 +139,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         scheduler,
         cfg_scale: cfgScale,
         steps,
+        control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
         // img2img params (only included when refining)
         ...(isRefineMode && {
           image: imageBase64,
@@ -214,6 +243,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     strength,
     batchSize,
     style,
+    controlLayers,
     isGenerating,
     setIsGenerating,
     setProgress,
@@ -226,8 +256,21 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         onOpenSettings={onOpenSettings}
         connectionStatus={connectionStatus}
       />
+      
+      <RegionSection />
+      
       <PromptSection onSubmit={handleGenerate} disabled={isGenerating} />
+      
+      <ControlLayerSection />
+      
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <Button size="s" variant="secondary" onClick={addControlLayer}>Add Control</Button>
+        <Button size="s" variant="secondary" onClick={addRegion}>Add Region</Button>
+      </div>
+
       <StrengthSlider />
+      <InpaintSettings />
+
       <GenerateButton
         onClick={handleGenerate}
         disabled={!isConnected || !prompt.trim()}

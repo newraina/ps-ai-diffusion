@@ -284,8 +284,35 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <dialog ref={dialogRef} className="settings-dialog">
       <div className="dialog-scroll-container">
-        {/* Backend Type Selection */}
-        <div className="form-field">
+        {/* General Settings */}
+        <div className="form-field" style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>General</h3>
+          
+          <div className="checkbox-field" style={{ marginBottom: 8 }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={settings.showNegativePrompt}
+                onChange={e => setSettings(prev => ({ ...prev, showNegativePrompt: e.target.checked }))}
+              />
+              <span>Show Negative Prompt</span>
+            </label>
+          </div>
+
+          <div className="checkbox-field">
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={settings.confirmDiscardImage}
+                onChange={e => setSettings(prev => ({ ...prev, confirmDiscardImage: e.target.checked }))}
+              />
+              <span>Confirm Discard Image</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="form-field" style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Connection</h3>
           <label>Backend</label>
           <div className="backend-tabs">
             <button

@@ -41,6 +41,9 @@ export type InpaintMode =
   | 'replace_background'
   | 'custom'
 
+export type InpaintFillMode = 'none' | 'neutral' | 'blur' | 'border' | 'inpaint'
+export type InpaintContext = 'automatic' | 'mask_bounds' | 'entire_image'
+
 // History types
 export interface HistoryImage {
   index: number
@@ -59,6 +62,38 @@ export interface HistoryGroup {
   images: HistoryImage[]
 }
 
+// Control Layer types
+export type ControlMode = 
+  | 'canny'
+  | 'depth'
+  | 'pose'
+  | 'lineart'
+  | 'scribble'
+  | 'segmentation'
+  | 'normal'
+  | 'softedge'
+
+export interface ControlLayer {
+  id: string
+  mode: ControlMode
+  layerId: number | null // Photoshop layer ID
+  layerName: string
+  image: string | null // base64
+  strength: number
+  isEnabled: boolean
+  isPreprocessor: boolean
+}
+
+// Region types
+export interface Region {
+  id: string
+  name: string
+  prompt: string
+  negativePrompt: string
+  layerId: number | null // Linked Photoshop layer ID
+  isVisible: boolean
+}
+
 // Generation state
 export interface GenerationState {
   workspace: Workspace
@@ -67,12 +102,16 @@ export interface GenerationState {
   negativePrompt: string
   strength: number
   inpaintMode: InpaintMode
+  inpaintFill: InpaintFillMode
+  inpaintContext: InpaintContext
   isGenerating: boolean
   progress: number
   progressText: string
   batchSize: number
   seed: number
   fixedSeed: boolean
+  controlLayers: ControlLayer[]
+  regions: Region[]
 }
 
 // Queue state

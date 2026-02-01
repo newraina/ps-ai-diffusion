@@ -9,6 +9,11 @@ export interface Settings {
   // Cloud service settings
   backendType: BackendType
   cloudAccessToken: string
+  // General settings
+  promptTranslation: string
+  promptLineCount: number
+  showNegativePrompt: boolean
+  confirmDiscardImage: boolean
 }
 
 const STORAGE_KEY = 'ps-ai-diffusion-settings'
@@ -18,6 +23,10 @@ const DEFAULT_SETTINGS: Settings = {
   authToken: '',
   backendType: 'local',
   cloudAccessToken: '',
+  promptTranslation: '',
+  promptLineCount: 3,
+  showNegativePrompt: true,
+  confirmDiscardImage: true,
 }
 
 export function getSettings(): Settings {
