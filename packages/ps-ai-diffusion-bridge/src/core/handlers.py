@@ -5,7 +5,8 @@ They can be used by both FastAPI and aiohttp (ComfyUI extension).
 """
 import os
 import base64
-from dataclasses import dataclass, asdict
+import re
+from dataclasses import dataclass, asdict, field
 from typing import Optional
 
 from .state import state, ConnectionStatus, BackendType
@@ -42,6 +43,27 @@ class GenerateParams:
     scheduler: str = "normal"
     image: Optional[str] = None  # Base64 PNG for img2img
     strength: float = 1.0  # Denoise strength (1.0 = full, 0.0 = none)
+    mask: Optional[str] = None  # Base64 PNG mask for inpaint/refine_region
+    # Optional LoRAs. Each entry can contain:
+    # - name: str (required)
+    # - strength: float (optional, default 1.0)
+    # - data: str (optional, base64-encoded safetensors bytes for upload)
+    loras: list[dict] = field(default_factory=list)
+    # Optional Control layers (ControlNet / IP-Adapter).
+    # Each entry can contain:
+    # - mode: str (shared.resources.ControlMode member name, e.g. "reference", "pose", "canny_edge")
+    # - image: str (optional, base64 PNG)
+    # - strength: float (optional)
+    # - range: [float, float] (optional)
+    control: list[dict] = field(default_factory=list)
+    # Optional regions (for regional prompting/control).
+    # Each entry can contain:
+    # - positive: str
+    # - mask: str (base64 PNG mask)
+    # - bounds: optional {x,y,width,height} (if omitted, derived from mask non-zero bbox)
+    # - control: optional list like GenerateParams.control
+    # - loras: optional list like GenerateParams.loras (payload upload supported)
+    regions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -167,6 +189,15 @@ async def handle_get_connection() -> ApiResponse:
             "connected": cloud_manager.is_connected,
             "user": asdict(state.cloud_user) if state.cloud_user else None,
             "models": checkpoints,
+            "web_url": cloud_manager.default_web_url,
+            "account_url": f"{cloud_manager.default_web_url}/user",
+            "buy_tokens_url": f"{cloud_manager.default_web_url}/checkout/tokens5000",
+            "features": asdict(cloud_manager.features) if cloud_manager.features else None,
+            "news": (
+                {"text": cloud_manager.news.text, "digest": cloud_manager.news.digest}
+                if cloud_manager.news
+                else None
+            ),
         })
     else:
         manager = get_manager()
@@ -299,15 +330,83 @@ async def _handle_generate_cloud(params: GenerateParams) -> ApiResponse:
 
     try:
         # Build WorkflowInput from GenerateParams
-        work = _build_workflow_input(params)
-        job_id = await cloud_manager.enqueue(work)
+        work, lora_payloads = _build_workflow_input(params)
+        job_id = await cloud_manager.enqueue(work, lora_payloads=lora_payloads)
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
     except Exception as e:
         return ApiResponse(data={"error": str(e)}, status=500)
 
 
+_pattern_lora_tag = re.compile(r"<lora:([^:<>]+)(?::(-?[^:<>]*))?>", re.IGNORECASE)
+
+
+def _parse_lora_tags(prompt: str) -> tuple[str, list[tuple[str, float]]]:
+    """Parse and strip <lora:name:weight> tags from prompt.
+
+    Returns:
+        (clean_prompt, [(name, strength), ...])
+    """
+    loras: list[tuple[str, float]] = []
+
+    def replace(match: re.Match[str]) -> str:
+        name = (match[1] or "").strip()
+        strength = 1.0
+        if match[2]:
+            try:
+                strength = float(match[2])
+            except ValueError:
+                strength = 1.0
+        if name:
+            loras.append((name, strength))
+        return ""
+
+    cleaned = _pattern_lora_tag.sub(replace, prompt)
+    return cleaned.strip(), loras
+
+
+def _mask_bounds_from_grayscale_bytes(data: bytes, width: int, height: int) -> tuple[int, int, int, int] | None:
+    """Compute bounding box of non-zero pixels in a grayscale mask.
+
+    Returns:
+        (x, y, w, h) in image coordinates, or None if mask is empty.
+    """
+    if width <= 0 or height <= 0:
+        return None
+
+    min_x, min_y = width, height
+    max_x, max_y = -1, -1
+
+    idx = 0
+    for y in range(height):
+        row_has = False
+        row_min_x = width
+        row_max_x = -1
+        for x in range(width):
+            if data[idx] != 0:
+                row_has = True
+                if x < row_min_x:
+                    row_min_x = x
+                if x > row_max_x:
+                    row_max_x = x
+            idx += 1
+        if row_has:
+            if y < min_y:
+                min_y = y
+            if y > max_y:
+                max_y = y
+            if row_min_x < min_x:
+                min_x = row_min_x
+            if row_max_x > max_x:
+                max_x = row_max_x
+
+    if max_x < min_x or max_y < min_y:
+        return None
+
+    return (min_x, min_y, (max_x - min_x + 1), (max_y - min_y + 1))
+
+
 def _build_workflow_input(params: GenerateParams):
-    """Convert GenerateParams to WorkflowInput for cloud backend."""
+    """Convert GenerateParams to (WorkflowInput, lora_payloads) for cloud backend."""
     import src.path_setup  # noqa: F401
     from shared.api import (
         WorkflowInput,
@@ -317,20 +416,78 @@ def _build_workflow_input(params: GenerateParams):
         SamplingInput,
         ConditioningInput,
         CheckpointInput,
+        LoraInput,
+        ControlInput,
+        RegionInput,
+        InpaintParams,
+        InpaintMode,
     )
-    from shared.image import Extent
+    from shared.image import Extent, Bounds, Image
+    from shared.resources import ControlMode
+
+    # Parse LoRA tags (best-effort) from prompt.
+    prompt_clean, lora_tags = _parse_lora_tags(params.prompt)
+    negative_clean, _ = _parse_lora_tags(params.negative_prompt or "")
 
     # Determine workflow kind
+    base_kind = WorkflowKind.generate
     if params.image and params.strength < 1.0:
-        kind = WorkflowKind.refine
-    else:
-        kind = WorkflowKind.generate
+        base_kind = WorkflowKind.refine
+
+    kind = base_kind
+    if params.mask:
+        # Mirror upstream behavior: mask upgrades generate->inpaint, refine->refine_region
+        kind = WorkflowKind.inpaint if base_kind is WorkflowKind.generate else WorkflowKind.refine_region
 
     # Build conditioning
     conditioning = ConditioningInput(
-        positive=params.prompt,
-        negative=params.negative_prompt,
+        positive=prompt_clean,
+        negative=negative_clean,
     )
+
+    def parse_control_list(items: list[dict]) -> list[ControlInput]:
+        controls: list[ControlInput] = []
+        for entry in items or []:
+            try:
+                mode_raw = str(entry.get("mode", "")).strip()
+                if not mode_raw:
+                    continue
+                mode_key = mode_raw.lower()
+                if mode_key not in ControlMode.__members__:
+                    raise ValueError(f"Unknown control mode: {mode_raw}")
+                mode = ControlMode[mode_key]
+
+                strength = float(entry.get("strength", 1.0))
+                r = entry.get("range")
+                if isinstance(r, (list, tuple)) and len(r) == 2:
+                    range_tuple = (float(r[0]), float(r[1]))
+                else:
+                    range_tuple = (
+                        float(entry.get("range_start", 0.0)),
+                        float(entry.get("range_end", 1.0)),
+                    )
+
+                img_b64 = entry.get("image")
+                img = None
+                if isinstance(img_b64, str) and img_b64:
+                    img_bytes = base64.b64decode(img_b64)
+                    img = Image.from_bytes(img_bytes)
+
+                controls.append(
+                    ControlInput(
+                        mode=mode,
+                        image=img,
+                        strength=strength,
+                        range=range_tuple,
+                    )
+                )
+            except Exception:
+                # Ignore malformed entries; request-level validation can be added later.
+                continue
+        return controls
+
+    # Global control layers
+    conditioning.control = parse_control_list(params.control)
 
     # Build sampling
     import random
@@ -344,8 +501,114 @@ def _build_workflow_input(params: GenerateParams):
         seed=seed,
     )
 
+    # Collect LoRAs from tags + request payloads
+    loras: list[LoraInput] = []
+    for name, strength in lora_tags:
+        loras.append(LoraInput(name=name, strength=strength))
+
+    # Optional LoRA payload uploads (base64 safetensors)
+    lora_payloads: dict[str, tuple[str, bytes]] = {}
+    for entry in (params.loras or []):
+        try:
+            name = str(entry.get("name", "")).strip()
+            if not name:
+                continue
+            strength = float(entry.get("strength", 1.0))
+            data_b64 = entry.get("data")
+            if isinstance(data_b64, str) and data_b64:
+                import hashlib
+                import base64 as _b64
+
+                raw = _b64.b64decode(data_b64)
+                storage_id = _b64.b64encode(hashlib.sha256(raw).digest()).decode("utf-8")
+                lora_payloads[name] = (storage_id, raw)
+                loras.append(LoraInput(name=name, strength=strength, storage_id=storage_id))
+            else:
+                # Reference-only LoRA (assumed available in cloud)
+                loras.append(LoraInput(name=name, strength=strength))
+        except Exception:
+            # Ignore malformed entries; request-level validation can be added later.
+            continue
+
+    # Regions (regional prompts/control/loras)
+    regions: list[RegionInput] = []
+    for region_entry in (params.regions or []):
+        try:
+            region_positive = str(region_entry.get("positive", "")).strip()
+            region_prompt_clean, region_lora_tags = _parse_lora_tags(region_positive)
+
+            mask_b64 = region_entry.get("mask")
+            if not (isinstance(mask_b64, str) and mask_b64):
+                continue
+            mask_bytes = base64.b64decode(mask_b64)
+            region_mask = Image.from_bytes(mask_bytes)
+            if not region_mask.is_mask:
+                # Best-effort conversion to grayscale
+                from PyQt5.QtGui import QImage  # type: ignore
+
+                region_mask._qimage = region_mask._qimage.convertToFormat(QImage.Format_Grayscale8)
+
+            bounds_data = region_entry.get("bounds")
+            if isinstance(bounds_data, dict):
+                bounds = Bounds(
+                    int(bounds_data.get("x", 0)),
+                    int(bounds_data.get("y", 0)),
+                    int(bounds_data.get("width", region_mask.width)),
+                    int(bounds_data.get("height", region_mask.height)),
+                )
+            else:
+                bbox = _mask_bounds_from_grayscale_bytes(
+                    bytes(region_mask.data), region_mask.width, region_mask.height
+                )
+                if bbox is None:
+                    continue
+                x, y, w, h = bbox
+                bounds = Bounds(x, y, w, h)
+
+            # Region control layers
+            region_controls = parse_control_list(region_entry.get("control", []) or [])
+
+            # Region loras: tags + payload list (optional)
+            region_loras: list[LoraInput] = [LoraInput(name=n, strength=s) for n, s in region_lora_tags]
+            for entry in (region_entry.get("loras", []) or []):
+                try:
+                    name = str(entry.get("name", "")).strip()
+                    if not name:
+                        continue
+                    strength = float(entry.get("strength", 1.0))
+                    data_b64 = entry.get("data")
+                    if isinstance(data_b64, str) and data_b64:
+                        import hashlib
+                        import base64 as _b64
+
+                        raw = _b64.b64decode(data_b64)
+                        storage_id = _b64.b64encode(hashlib.sha256(raw).digest()).decode("utf-8")
+                        lora_payloads[name] = (storage_id, raw)
+                        region_loras.append(
+                            LoraInput(name=name, strength=strength, storage_id=storage_id)
+                        )
+                    else:
+                        region_loras.append(LoraInput(name=name, strength=strength))
+                except Exception:
+                    continue
+
+            regions.append(
+                RegionInput(
+                    mask=region_mask,
+                    bounds=bounds,
+                    positive=region_prompt_clean,
+                    control=region_controls,
+                    loras=region_loras,
+                )
+            )
+        except Exception:
+            continue
+
+    if regions:
+        conditioning.regions = regions
+
     # Build models
-    models = CheckpointInput(checkpoint=params.model) if params.model else None
+    models = CheckpointInput(checkpoint=params.model, loras=loras) if params.model else None
 
     # Build extent
     extent = Extent(params.width, params.height)
@@ -358,14 +621,42 @@ def _build_workflow_input(params: GenerateParams):
 
     # Build image input if provided
     images = ImageInput(extent=extent_input)
+    inpaint = None
+    crop_upscale_extent = None
+
     if params.image:
-        from shared.image import Image
         image_bytes = base64.b64decode(params.image)
         initial_image = Image.from_bytes(image_bytes)
-        images = ImageInput(
-            extent=extent_input,
-            initial_image=initial_image,
-        )
+        images = ImageInput(extent=extent_input, initial_image=initial_image)
+
+    if params.mask:
+        if not params.image:
+            raise ValueError("mask requires image input (inpaint/refine_region)")
+
+        mask_bytes = base64.b64decode(params.mask)
+        mask_img = Image.from_bytes(mask_bytes)
+        if not mask_img.is_mask:
+            # Ensure grayscale mask
+            from PyQt5.QtGui import QImage  # type: ignore
+
+            mask_img._qimage = mask_img._qimage.convertToFormat(QImage.Format.Format_Grayscale8)
+
+        # Compute bounds from non-zero pixels; fall back to full image bounds.
+        raw = bytes(mask_img.data)
+        bbox = _mask_bounds_from_grayscale_bytes(raw, mask_img.width, mask_img.height)
+        if bbox is None:
+            raise ValueError("mask is empty")
+        x, y, w, h = bbox
+        bounds = Bounds(x, y, w, h)
+
+        images.hires_mask = mask_img
+
+        # Minimal inpaint params. Fine-grained options can be added later.
+        inpaint = InpaintParams(InpaintMode.fill, bounds)
+        inpaint.use_inpaint_model = params.strength >= 0.95
+
+        if kind is WorkflowKind.inpaint:
+            crop_upscale_extent = bounds.extent
 
     return WorkflowInput(
         kind=kind,
@@ -374,7 +665,9 @@ def _build_workflow_input(params: GenerateParams):
         models=models,
         batch_count=params.batch_size,
         images=images,
-    )
+        inpaint=inpaint,
+        crop_upscale_extent=crop_upscale_extent,
+    ), lora_payloads
 
 
 async def handle_get_job(job_id: str) -> ApiResponse:
@@ -388,11 +681,26 @@ async def handle_get_job(job_id: str) -> ApiResponse:
         if not job:
             return ApiResponse(data={"error": "Job not found"}, status=404)
 
+        # Map cloud-specific statuses to the plugin's existing status contract.
+        # Plugin expects: queued | executing | finished | error | interrupted
+        status_map = {
+            CloudJobStatus.queued: "queued",
+            CloudJobStatus.uploading: "queued",
+            CloudJobStatus.in_queue: "queued",
+            CloudJobStatus.in_progress: "executing",
+            CloudJobStatus.finished: "finished",
+            CloudJobStatus.error: "error",
+            CloudJobStatus.cancelled: "interrupted",
+            CloudJobStatus.timed_out: "error",
+        }
+        mapped_status = status_map.get(job.status, "error")
+
         return ApiResponse(data={
             "job_id": job_id,
-            "status": job.status.value,
+            "status": mapped_status,
             "progress": job.progress,
             "error": job.error,
+            "payment_required": asdict(job.payment_required) if job.payment_required else None,
             "image_count": len(job.images),
         })
     else:
@@ -597,15 +905,43 @@ async def handle_upscale(params: UpscaleParams) -> ApiResponse:
             status=400
         )
 
-    manager = get_manager()
-
-    if not manager.is_connected:
-        return ApiResponse(
-            data={"error": "Not connected to ComfyUI"},
-            status=503
-        )
-
     try:
+        if state.backend_type == BackendType.cloud:
+            if not cloud_manager.is_connected:
+                return ApiResponse(
+                    data={"error": "Not connected to cloud service"},
+                    status=503
+                )
+
+            # Decode base64 (strip data URL prefix if present)
+            image_b64 = params.image
+            if "," in image_b64:
+                image_b64 = image_b64.split(",", 1)[1]
+
+            try:
+                image_bytes = base64.b64decode(image_b64)
+            except Exception as e:
+                return ApiResponse(data={"error": f"Invalid base64 image: {e}"}, status=400)
+
+            # Reuse shared workflow constructors (krite-ai-diffusion parity).
+            import src.path_setup  # noqa: F401
+            from shared.image import Image
+            from shared.workflow import prepare_upscale_simple
+
+            image = Image.from_bytes(image_bytes)
+            model_name = params.model or DEFAULT_UPSCALE_MODEL
+            work = prepare_upscale_simple(image=image, model=model_name, factor=params.factor)
+            job_id = await cloud_manager.enqueue(work)
+            return ApiResponse(data={"job_id": job_id, "status": "queued"})
+
+        manager = get_manager()
+
+        if not manager.is_connected:
+            return ApiResponse(
+                data={"error": "Not connected to ComfyUI"},
+                status=503
+            )
+
         job_id = await manager.enqueue_upscale(
             image_base64=params.image,
             factor=params.factor,

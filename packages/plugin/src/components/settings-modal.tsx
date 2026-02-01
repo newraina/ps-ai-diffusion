@@ -9,6 +9,7 @@ import {
 } from '../services/settings'
 import {
   type CloudUser,
+  getConnection,
   setBridgeMode,
   testConnection,
   signIn,
@@ -46,6 +47,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [cloudAuthStatus, setCloudAuthStatus] = useState<CloudAuthStatus>('idle')
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
   const [cloudError, setCloudError] = useState<string | null>(null)
+  const [cloudMeta, setCloudMeta] = useState<{
+    webUrl?: string
+    accountUrl?: string
+    buyTokensUrl?: string
+    newsText?: string
+    featuresText?: string
+  } | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -90,13 +98,37 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (result.valid && result.user) {
         setCloudUser(result.user)
         setCloudAuthStatus('connected')
+        await refreshCloudMeta()
       } else {
         setCloudAuthStatus('idle')
         setCloudError(result.error || 'Token invalid')
+        setCloudMeta(null)
       }
     } catch (e) {
       setCloudAuthStatus('idle')
       setCloudError(String(e))
+      setCloudMeta(null)
+    }
+  }
+
+  async function refreshCloudMeta() {
+    try {
+      const conn = await getConnection()
+      const features = conn.features
+      setCloudMeta({
+        webUrl: conn.web_url,
+        accountUrl: conn.account_url,
+        buyTokensUrl: conn.buy_tokens_url,
+        newsText: conn.news?.text,
+        featuresText: features
+          ? `IP-Adapter: ${features.ip_adapter ? 'on' : 'off'}, Translation: ${features.translation ? 'on' : 'off'}`
+          : undefined,
+      })
+      if (conn.user) {
+        setCloudUser(conn.user)
+      }
+    } catch {
+      // Meta is optional; ignore fetch errors.
     }
   }
 
@@ -132,6 +164,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               ...prev,
               cloudAccessToken: confirmResult.token!,
             }))
+            await refreshCloudMeta()
           } else if (confirmResult.status === 'timeout' || confirmResult.status === 'error') {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)
@@ -164,6 +197,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setCloudUser(null)
     setCloudAuthStatus('idle')
     setCloudError(null)
+    setCloudMeta(null)
     setSettings(prev => ({
       ...prev,
       cloudAccessToken: '',
@@ -193,6 +227,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
         // Connect to cloud backend
         await connect('cloud', undefined, settings.cloudAccessToken)
+        await refreshCloudMeta()
         setTestResult({ success: true, message: 'Connected to cloud service' })
         saveSettings(settings)
         dialogRef.current?.close('saved')
@@ -295,14 +330,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <Button
                     size="s"
                     variant="secondary"
-                    onClick={() => openBrowser('https://www.interstice.cloud/user')}
+                  onClick={() => openBrowser(cloudMeta?.accountUrl || 'https://www.interstice.cloud/user')}
                   >
                     View Account
                   </Button>
                   <Button
                     size="s"
                     variant="secondary"
-                    onClick={() => openBrowser('https://www.interstice.cloud/checkout/tokens5000')}
+                  onClick={() =>
+                    openBrowser(cloudMeta?.buyTokensUrl || 'https://www.interstice.cloud/checkout/tokens5000')
+                  }
                   >
                     Buy Tokens
                   </Button>
@@ -310,6 +347,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     Sign Out
                   </Button>
                 </div>
+              {cloudMeta?.featuresText && (
+                <div className="user-field">
+                  <span className="field-label">Features:</span>
+                  <span className="field-value">{cloudMeta.featuresText}</span>
+                </div>
+              )}
+              {cloudMeta?.newsText && (
+                <div className="user-field">
+                  <span className="field-label">News:</span>
+                  <span className="field-value">{cloudMeta.newsText}</span>
+                </div>
+              )}
               </div>
             ) : (
               <div className="cloud-sign-in">

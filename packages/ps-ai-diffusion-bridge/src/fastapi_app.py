@@ -63,6 +63,33 @@ class ConnectionRequest(BaseModel):
     auth_token: Optional[str] = None
 
 
+class LoraRequest(BaseModel):
+    """Optional LoRA payload for cloud service.
+
+    Notes:
+        data is optional; if omitted, LoRA is treated as a reference-only name.
+    """
+
+    name: str
+    strength: float = 1.0
+    data: Optional[str] = None  # base64-encoded safetensors bytes
+
+
+class ControlRequest(BaseModel):
+    mode: str
+    image: Optional[str] = None  # base64 PNG
+    strength: float = 1.0
+    range: Optional[list[float]] = None  # [start, end]
+
+
+class RegionRequest(BaseModel):
+    positive: str = ""
+    mask: str  # base64 PNG mask
+    bounds: Optional[dict] = None  # {x,y,width,height}
+    control: list[ControlRequest] = []
+    loras: list[LoraRequest] = []
+
+
 class GenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
@@ -75,6 +102,12 @@ class GenerateRequest(BaseModel):
     batch_size: int = 1
     sampler: str = "euler"
     scheduler: str = "normal"
+    image: Optional[str] = None  # Base64 encoded PNG
+    strength: float = 1.0  # 0.0-1.0 (img2img / refine)
+    mask: Optional[str] = None  # Base64 encoded PNG mask (inpaint/refine_region)
+    loras: list[LoraRequest] = []
+    control: list[ControlRequest] = []
+    regions: list[RegionRequest] = []
 
 
 class GenerateResponse(BaseModel):
@@ -97,6 +130,7 @@ class JobStatusResponse(BaseModel):
     status: str
     progress: float
     error: Optional[str] = None
+    payment_required: Optional[dict] = None
     image_count: int = 0
 
 
@@ -186,6 +220,12 @@ async def generate(request: GenerateRequest):
         batch_size=request.batch_size,
         sampler=request.sampler,
         scheduler=request.scheduler,
+        image=request.image,
+        strength=request.strength,
+        mask=request.mask,
+        loras=[l.model_dump() for l in request.loras] if request.loras else [],
+        control=[c.model_dump() for c in request.control] if request.control else [],
+        regions=[r.model_dump() for r in request.regions] if request.regions else [],
     )
     resp = await handle_generate(params)
     if resp.status != 200:

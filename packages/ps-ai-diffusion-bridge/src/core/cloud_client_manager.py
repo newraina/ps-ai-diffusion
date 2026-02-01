@@ -17,6 +17,7 @@ from .cloud_types import (
     CloudJobState,
     CloudJobStatus,
     CloudNews,
+    CloudPaymentRequired,
     CloudUser,
     ImageData,
 )
@@ -235,7 +236,11 @@ class CloudClientManager:
 
     # === Job Management ===
 
-    async def enqueue(self, work: WorkflowInput) -> str:
+    async def enqueue(
+        self,
+        work: WorkflowInput,
+        lora_payloads: dict[str, tuple[str, bytes]] | None = None,
+    ) -> str:
         """
         Submit a generation job.
 
@@ -255,11 +260,16 @@ class CloudClientManager:
         self._jobs[job_id] = CloudJobState(status=CloudJobStatus.queued)
 
         # Start job processing in background
-        asyncio.create_task(self._process_job(job_id, work))
+        asyncio.create_task(self._process_job(job_id, work, lora_payloads or {}))
 
         return job_id
 
-    async def _process_job(self, job_id: str, work: WorkflowInput):
+    async def _process_job(
+        self,
+        job_id: str,
+        work: WorkflowInput,
+        lora_payloads: dict[str, tuple[str, bytes]],
+    ):
         """Process a job through send -> generate -> receive stages."""
         import logging
         logger = logging.getLogger(__name__)
@@ -274,7 +284,12 @@ class CloudClientManager:
             logger.info(f"[Cloud] Workflow kind: {input_data.get('kind')}")
             logger.info(f"[Cloud] Workflow models: {input_data.get('models')}")
             logger.info(f"[Cloud] Workflow sampling: {input_data.get('sampling')}")
+            await self._send_loras(work, lora_payloads)
             await self._send_images(input_data)
+
+            if job.cancel_requested:
+                job.status = CloudJobStatus.cancelled
+                return
 
             # Stage 2: Generate (submit and poll)
             job.status = CloudJobStatus.in_queue
@@ -295,6 +310,8 @@ class CloudClientManager:
             logger.info(f"[Cloud] Generate response full: {response}")
             remote_id = response["id"]
             worker_id = response.get("worker_id")
+            job.remote_id = remote_id
+            job.worker_id = worker_id
 
             # Update user credits
             if self._user and "user" in response:
@@ -309,6 +326,12 @@ class CloudClientManager:
             status = response.get("status", "").lower()
             logger.info(f"[Cloud] Initial status: {status}")
             while status in ("in_queue", "in_progress"):
+                if job.cancel_requested:
+                    # Cancellation request is handled via cancel() which also performs remote cancel.
+                    # We stop polling and let the job end in cancelled state.
+                    job.status = CloudJobStatus.cancelled
+                    return
+
                 response = await self._post(f"status/{remote_id}", {})
                 status = response.get("status", "").lower()
                 logger.info(f"[Cloud] Poll status: {status}, response: {response}")
@@ -347,7 +370,22 @@ class CloudClientManager:
             logger.error(f"[Cloud] NetworkError: status={e.status}, message={e.message}")
             job.status = CloudJobStatus.error
             if e.status == 402:
-                job.error = "Insufficient credits. Please purchase more tokens."
+                # 402 Payment Required: provide structured payload for UI CTAs.
+                credits = None
+                details = None
+                if isinstance(e.data, dict):
+                    credits = e.data.get("credits")
+                    details = e.data
+
+                if self._user and isinstance(credits, int):
+                    self._user.credits = credits
+
+                job.payment_required = CloudPaymentRequired(
+                    url=f"{self.default_web_url}/user",
+                    credits=credits,
+                    details=details,
+                )
+                job.error = e.message or "Insufficient credits. Please purchase more tokens."
             else:
                 job.error = e.message
 
@@ -382,6 +420,48 @@ class CloudClientManager:
         await self._requests.put(upload_info["url"], data)
         return upload_info["object"]
 
+    async def _send_loras(self, work: WorkflowInput, lora_payloads: dict[str, tuple[str, bytes]]):
+        """Upload LoRA payloads if provided.
+
+        Notes:
+            This is a simplified version of upstream LoRA upload logic.
+            It only uploads LoRAs that include payload bytes in the request.
+        """
+        if not lora_payloads:
+            return
+
+        models = work.models
+        if not models or not models.loras:
+            return
+
+        for lora in models.loras:
+            if lora.name not in lora_payloads:
+                continue
+            storage_id, data = lora_payloads[lora.name]
+            # Ensure WorkflowInput references the uploaded storage id.
+            lora.storage_id = storage_id
+            await self._upload_lora(storage_id, data)
+
+    async def _upload_lora(self, storage_id: str, data: bytes) -> None:
+        """Upload LoRA to temporary S3 storage via cloud API."""
+        upload = await self._post("upload/lora", {"hash": storage_id, "size": len(data)})
+        status = upload.get("status", "")
+        if status == "too-large":
+            max_size = int(upload.get("max", 0)) / (1024 * 1024)
+            raise ValueError(f"LoRA model is too large to upload (max {max_size:.1f} MB)")
+        if status == "limit-exceeded":
+            raise ValueError("Can't upload LoRA model, limit exceeded")
+        if status == "cached":
+            return
+
+        url = upload.get("url")
+        if not url:
+            raise ValueError("Invalid upload URL for LoRA")
+
+        # Use S3 checksum header with base64-encoded sha256 (storage_id).
+        async for _sent, _total in self._requests.upload(url, data, sha256=storage_id):
+            pass
+
     async def _receive_images(self, images: dict) -> ImageData:
         """Download result images."""
         offsets = images.get("offsets", [])
@@ -414,7 +494,17 @@ class CloudClientManager:
         if not job:
             return False
 
-        # Mark as cancelled - the processing task will handle it
+        job.cancel_requested = True
+
+        # If we already have remote identifiers, request remote cancellation as well.
+        if job.remote_id and job.worker_id:
+            try:
+                await self._post(f"cancel/{job.worker_id}/{job.remote_id}", {})
+            except Exception:
+                # If remote cancel fails, still mark local job as cancelled.
+                # The status polling loop will stop on cancel_requested.
+                pass
+
         job.status = CloudJobStatus.cancelled
         return True
 

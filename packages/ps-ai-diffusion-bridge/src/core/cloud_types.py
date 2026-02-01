@@ -35,6 +35,15 @@ class CloudFeatures:
     max_control_layers: int = 4
 
 
+@dataclass
+class CloudPaymentRequired:
+    """Structured payload for 402 Payment Required errors."""
+
+    url: str
+    credits: int | None = None
+    details: dict | None = None
+
+
 class CloudJobStatus(str, Enum):
     """Cloud job status."""
 
@@ -56,6 +65,12 @@ class CloudJobState:
     progress: float = 0.0
     images: list[bytes] = field(default_factory=list)
     error: str | None = None
+    payment_required: CloudPaymentRequired | None = None
+    # Remote identifiers returned by cloud API (needed for cancellation)
+    remote_id: str | None = None
+    worker_id: str | None = None
+    # Cancellation requested by client
+    cancel_requested: bool = False
 
 
 class ImageData:

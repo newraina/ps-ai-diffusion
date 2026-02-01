@@ -76,6 +76,12 @@ if PromptServer is not None:
             batch_size=data.get("batch_size", 1),
             sampler=data.get("sampler", "euler"),
             scheduler=data.get("scheduler", "normal"),
+            image=data.get("image"),
+            strength=data.get("strength", 1.0),
+            mask=data.get("mask"),
+            loras=data.get("loras", []) or [],
+            control=data.get("control", []) or data.get("controls", []) or [],
+            regions=data.get("regions", []) or [],
         )
         resp = await handle_generate(params)
         return _json_response(resp)

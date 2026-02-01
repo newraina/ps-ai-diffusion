@@ -36,12 +36,29 @@ export interface CloudUser {
   images_generated: number
 }
 
+export interface CloudNews {
+  text: string
+  digest: string
+}
+
+export interface CloudFeatures {
+  ip_adapter: boolean
+  translation: boolean
+  max_upload_size: number
+  max_control_layers: number
+}
+
 export interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error' | 'auth_pending'
   backend: 'local' | 'cloud'
   comfy_url: string
   error: string | null
   user?: CloudUser // Only present for cloud backend when connected
+  web_url?: string
+  account_url?: string
+  buy_tokens_url?: string
+  features?: CloudFeatures | null
+  news?: CloudNews | null
 }
 
 export interface GenerateRequest {
@@ -59,6 +76,25 @@ export interface GenerateRequest {
   sampler?: string
   scheduler?: string
   model?: string
+  loras?: Array<{ name: string; strength?: number; data?: string }>
+  control?: Array<{
+    mode: string
+    image?: string
+    strength?: number
+    range?: [number, number]
+  }>
+  regions?: Array<{
+    positive?: string
+    mask: string
+    bounds?: { x: number; y: number; width: number; height: number }
+    control?: Array<{
+      mode: string
+      image?: string
+      strength?: number
+      range?: [number, number]
+    }>
+    loras?: Array<{ name: string; strength?: number; data?: string }>
+  }>
 }
 
 export interface UpscaleRequest {
@@ -116,6 +152,11 @@ export interface JobStatus {
   status: 'queued' | 'executing' | 'finished' | 'error' | 'interrupted'
   progress: number
   error: string | null
+  payment_required?: {
+    url: string
+    credits?: number | null
+    details?: Record<string, unknown> | null
+  } | null
   image_count: number
 }
 

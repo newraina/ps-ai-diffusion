@@ -9,6 +9,7 @@ import {
   getJobImages,
   cancelJob,
 } from '../services/bridge-client'
+import { openBrowser } from '../utils/uxp'
 import {
   hasActiveDocument,
   getDocumentImageBase64,
@@ -95,6 +96,19 @@ export function UpscalePanel({
             setProgress(0.9, 'Fetching result...')
             break
           case 'error':
+            if (status.payment_required?.url) {
+              const credits =
+                typeof status.payment_required.credits === 'number'
+                  ? status.payment_required.credits
+                  : null
+              const message =
+                credits !== null
+                  ? `Insufficient credits (remaining: ${credits}). Open your account to buy tokens?`
+                  : 'Insufficient credits. Open your account to buy tokens?'
+              if (confirm(message)) {
+                openBrowser(status.payment_required.url)
+              }
+            }
             throw new Error(status.error || 'Upscale failed')
           case 'interrupted':
             finished = true

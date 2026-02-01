@@ -16,6 +16,7 @@ import {
 import { hasActiveDocument, getDocumentImageBase64 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
+import { openBrowser } from '../utils/uxp'
 import type { HistoryGroup, HistoryImage } from '../types'
 
 interface GeneratePanelProps {
@@ -141,6 +142,19 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
             setProgress(1, 'Fetching images...')
             break
           case 'error':
+            if (status.payment_required?.url) {
+              const credits =
+                typeof status.payment_required.credits === 'number'
+                  ? status.payment_required.credits
+                  : null
+              const message =
+                credits !== null
+                  ? `Insufficient credits (remaining: ${credits}). Open your account to buy tokens?`
+                  : 'Insufficient credits. Open your account to buy tokens?'
+              if (confirm(message)) {
+                openBrowser(status.payment_required.url)
+              }
+            }
             throw new Error(status.error || 'Generation failed')
           case 'interrupted':
             // User cancelled
