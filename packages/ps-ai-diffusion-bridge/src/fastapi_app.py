@@ -12,6 +12,7 @@ from src.core import get_manager
 from src.core.handlers import (
     ApiResponse,
     GenerateParams,
+    UpscaleParams,
     handle_health,
     handle_get_connection,
     handle_post_connection,
@@ -21,6 +22,7 @@ from src.core.handlers import (
     handle_get_job_image,
     handle_cancel_job,
     handle_get_styles,
+    handle_upscale,
 )
 
 
@@ -62,6 +64,12 @@ class GenerateRequest(BaseModel):
 class GenerateResponse(BaseModel):
     job_id: str
     status: str
+
+
+class UpscaleRequest(BaseModel):
+    image: str  # Base64 encoded PNG
+    factor: float = 2.0
+    model: str = ""
 
 
 class JobStatusResponse(BaseModel):
@@ -158,6 +166,22 @@ async def get_job_image(job_id: str, index: int):
 async def cancel_job(job_id: str):
     """Cancel a generation job."""
     resp = await handle_cancel_job(job_id)
+    if resp.status != 200:
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+# Upscale Endpoints
+
+@app.post("/api/upscale", response_model=GenerateResponse)
+async def upscale(request: UpscaleRequest):
+    """Submit an upscale job."""
+    params = UpscaleParams(
+        image=request.image,
+        factor=request.factor,
+        model=request.model,
+    )
+    resp = await handle_upscale(params)
     if resp.status != 200:
         raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
     return resp.data

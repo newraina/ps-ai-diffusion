@@ -14,6 +14,7 @@ except ImportError:
 from src.core.handlers import (
     ApiResponse,
     GenerateParams,
+    UpscaleParams,
     handle_health,
     handle_get_connection,
     handle_post_connection,
@@ -23,6 +24,7 @@ from src.core.handlers import (
     handle_get_job_image,
     handle_cancel_job,
     handle_get_styles,
+    handle_upscale,
 )
 
 API_PREFIX = "/api/ps-ai-diffusion-bridge"
@@ -106,4 +108,15 @@ if PromptServer is not None:
     @routes.get(f"{API_PREFIX}/styles")
     async def get_styles(request):
         resp = await handle_get_styles()
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/upscale")
+    async def upscale(request):
+        data = await request.json()
+        params = UpscaleParams(
+            image=data.get("image", ""),
+            factor=data.get("factor", 2.0),
+            model=data.get("model", ""),
+        )
+        resp = await handle_upscale(params)
         return _json_response(resp)
