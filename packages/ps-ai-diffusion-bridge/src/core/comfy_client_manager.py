@@ -317,6 +317,8 @@ class ComfyClientManager:
         batch_size: int = 1,
         sampler: str = "euler",
         scheduler: str = "normal",
+        image: Optional[str] = None,
+        strength: float = 1.0,
     ) -> str:
         """Submit a generation job and return job_id."""
         if not self._session or not self._is_connected:
@@ -324,20 +326,40 @@ class ComfyClientManager:
 
         job_id = str(uuid.uuid4())
 
-        # Build workflow
-        workflow, actual_seed = build_txt2img_workflow(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=width,
-            height=height,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            seed=seed,
-            checkpoint=checkpoint,
-            batch_size=batch_size,
-            sampler=sampler,
-            scheduler=scheduler,
-        )
+        # Choose workflow based on whether image is provided
+        if image and strength < 1.0:
+            # img2img mode: upload image and use img2img workflow
+            image_filename = await self._upload_image(image)
+            workflow, actual_seed = build_img2img_workflow(
+                image_filename=image_filename,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg_scale=cfg_scale,
+                seed=seed,
+                checkpoint=checkpoint,
+                batch_size=batch_size,
+                sampler=sampler,
+                scheduler=scheduler,
+                strength=strength,
+            )
+        else:
+            # txt2img mode
+            workflow, actual_seed = build_txt2img_workflow(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg_scale=cfg_scale,
+                seed=seed,
+                checkpoint=checkpoint,
+                batch_size=batch_size,
+                sampler=sampler,
+                scheduler=scheduler,
+            )
 
         # Initialize job state
         self.jobs[job_id] = JobState(
