@@ -434,13 +434,16 @@ button:disabled {
 }
 
 .workspace-icon {
-  font-size: 14px;
+  display: inline-flex;
 }
 
 .dropdown-arrow {
   font-size: 10px;
   margin-left: 2px;
   opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .workspace-menu {
@@ -623,16 +626,27 @@ button:disabled {
 
 .generate-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
 }
 
 .generate-row > * + * {
   margin-left: 4px;
 }
 
+.generate-row > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .generate-button-group {
   display: flex;
   flex: 1;
+  align-items: center;
+}
+
+.generate-button-group > * {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .generate-button {
@@ -643,6 +657,12 @@ button:disabled {
   font-size: 12px;
 }
 
+.generate-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .generate-button .generate-icon {
   margin-right: 4px;
 }
@@ -650,7 +670,14 @@ button:disabled {
 .mode-dropdown-button {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   padding: 0 6px;
-  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mode-dropdown-button .dropdown-arrow {
+  font-size: 8px;
+  opacity: 0.8;
 }
 
 .queue-button {
@@ -661,7 +688,7 @@ button:disabled {
 
 .queue-button .queue-icon {
   margin-right: 3px;
-  font-size: 12px;
+  vertical-align: middle;
 }
 
 .queue-button .queue-count {

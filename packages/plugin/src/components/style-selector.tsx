@@ -5,13 +5,14 @@ import { useStyles } from '../contexts/styles-context'
 import { workspaceLabels } from '../services/mock-data'
 import { getArchPrefix } from '../types'
 import type { Workspace } from '../types'
+import { Icon, type IconName } from '../icons'
 
-const workspaceIcons: Record<Workspace, string> = {
-  generation: '✦',
-  upscaling: '⤢',
-  live: '◉',
-  animation: '▶',
-  custom: '⚙',
+const workspaceIcons: Record<Workspace, IconName> = {
+  generation: 'workspace-generation',
+  upscaling: 'workspace-upscaling',
+  live: 'workspace-live',
+  animation: 'workspace-animation',
+  custom: 'workspace-custom',
 }
 
 interface StyleSelectorProps {
@@ -46,7 +47,7 @@ export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelecto
     <div className="style-selector">
       <div className="workspace-dropdown">
         <ActionButton size="s" quiet className="workspace-button">
-          <span className="workspace-icon">{workspaceIcons[workspace]}</span>
+          <Icon name={workspaceIcons[workspace]} size={14} className="workspace-icon" />
           <span className="dropdown-arrow">▾</span>
         </ActionButton>
         <div className="workspace-menu">
@@ -56,7 +57,7 @@ export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelecto
               className={`workspace-menu-item ${ws === workspace ? 'selected' : ''}`}
               onClick={() => handleWorkspaceChange(ws)}
             >
-              <span className="workspace-icon">{workspaceIcons[ws]}</span>
+              <Icon name={workspaceIcons[ws]} size={14} className="workspace-icon" />
               <span>{workspaceLabels[ws]}</span>
             </div>
           ))}
@@ -90,7 +91,7 @@ export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelecto
         title="Settings"
         onClick={onOpenSettings}
       >
-        ⚙
+        <Icon name="settings" size={14} />
       </ActionButton>
       <span className={`status-dot ${connectionStatus ?? 'unknown'}`} />
     </div>
