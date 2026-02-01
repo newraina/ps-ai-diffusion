@@ -12,19 +12,17 @@ export function StrengthSlider() {
 
   return (
     <div className="strength-row">
-      <input
-        type="range"
+      <sp-slider
         className="strength-slider"
         min={1}
         max={100}
         value={strength}
-        onChange={handleSliderChange}
+        onInput={handleSliderChange}
       />
-      <input
-        type="checkbox"
+      <sp-checkbox
         className="strength-checkbox"
-        checked={strength < 100}
-        onChange={() => setStrength(strength === 100 ? 75 : 100)}
+        checked={strength < 100 ? true : undefined}
+        onClick={() => setStrength(strength === 100 ? 75 : 100)}
       />
       <span className="strength-display">Strength: {displayValue}</span>
       <ActionButton size="s" quiet className="control-button" title="Add Control Layer">
