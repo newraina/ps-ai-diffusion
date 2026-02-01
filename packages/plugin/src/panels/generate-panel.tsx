@@ -18,7 +18,7 @@ import {
   getJobImages,
   cancelJob,
 } from '../services/bridge-client'
-import { hasActiveDocument, getDocumentImageBase64, getLayerImageBase64 } from '../services/photoshop-layer'
+import { hasActiveDocument, hasActiveSelection, getSelectionMaskBase64, getDocumentImageBase64, getLayerImageBase64 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import { openBrowser } from '../utils/uxp'
@@ -147,8 +147,29 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     try {
       const isRefineMode = snapshot.strength < 100
       let imageBase64: string | undefined
+      let maskBase64: string | null = null
 
-      if (isRefineMode) {
+      const hasSelection = await hasActiveSelection()
+      if (!hasSelection && snapshot.inpaintMode !== 'automatic') {
+        setIsGenerating(false)
+        setProgress(0)
+        alert('No active selection found for inpaint.')
+        return
+      }
+
+      if (hasSelection) {
+        setProgress(0, 'Capturing selection...')
+        try {
+          maskBase64 = await getSelectionMaskBase64()
+          if (!maskBase64) {
+            throw new Error('Selection mask is empty')
+          }
+        } catch (error) {
+          throw new Error(`Failed to capture selection mask: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      if (isRefineMode || maskBase64) {
         setProgress(0, 'Capturing document...')
         try {
           imageBase64 = await getDocumentImageBase64()
@@ -214,7 +235,12 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         steps: finalSteps,
         seed: snapshot.fixedSeed ? snapshot.seed : -1,
         control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
+        mask: maskBase64 || undefined,
         ...(isRefineMode && {
+          image: imageBase64,
+          strength: snapshot.strength / 100,
+        }),
+        ...(!isRefineMode && maskBase64 && {
           image: imageBase64,
           strength: snapshot.strength / 100,
         }),

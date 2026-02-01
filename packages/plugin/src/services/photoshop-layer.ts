@@ -212,6 +212,226 @@ export function hasActiveDocument(): boolean {
 }
 
 /**
+ * Check if there is an active selection in the document.
+ */
+export async function hasActiveSelection(): Promise<boolean> {
+  const doc = app.activeDocument
+  if (!doc) return false
+
+  try {
+    await action.batchPlay(
+      [
+        {
+          _obj: 'get',
+          _target: [
+            { _property: 'selection' },
+            { _ref: 'document', _id: doc.id },
+          ],
+          _options: { dialogOptions: 'dontDisplay' },
+        },
+      ],
+      { synchronousExecution: true },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Export the current selection as a black/white PNG mask.
+ * Returns null when no selection exists.
+ */
+export async function getSelectionMaskBase64(): Promise<string | null> {
+  const doc = app.activeDocument
+  if (!doc) return null
+
+  const hasSelection = await hasActiveSelection()
+  if (!hasSelection) return null
+
+  return new Promise((resolve, reject) => {
+    core.executeAsModal(
+      async () => {
+        try {
+          const channelName = 'AI Selection Mask'
+
+          // Duplicate document to avoid touching the original
+          await action.batchPlay(
+            [
+              {
+                _obj: 'duplicate',
+                _target: [{ _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }],
+                name: 'temp_mask',
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Now the duplicate document is active
+          const dupDoc = app.activeDocument
+          if (!dupDoc) {
+            resolve(null)
+            return
+          }
+
+          try {
+            await action.batchPlay(
+              [
+                {
+                  _obj: 'get',
+                  _target: [
+                    { _property: 'selection' },
+                    { _ref: 'document', _id: dupDoc.id },
+                  ],
+                  _options: { dialogOptions: 'dontDisplay' },
+                },
+              ],
+              { synchronousExecution: true },
+            )
+          } catch {
+            await action.batchPlay(
+              [
+                {
+                  _obj: 'close',
+                  saving: { _enum: 'yesNo', _value: 'no' },
+                  _options: { dialogOptions: 'dontDisplay' },
+                },
+              ],
+              { synchronousExecution: false },
+            )
+            resolve(null)
+            return
+          }
+
+          // Save selection into an alpha channel
+          await action.batchPlay(
+            [
+              {
+                _obj: 'make',
+                _target: [{ _ref: 'channel' }],
+                using: { _ref: 'selection' },
+                name: channelName,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Flatten and paint a black background
+          await action.batchPlay(
+            [
+              {
+                _obj: 'flattenImage',
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'set',
+                _target: [{ _ref: 'channel', _property: 'selection' }],
+                to: { _enum: 'ordinal', _value: 'allEnum' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'fill',
+                using: { _enum: 'fillContents', _value: 'color' },
+                color: { _obj: 'RGBColor', red: 0, green: 0, blue: 0 },
+                opacity: 100,
+                mode: { _enum: 'blendMode', _value: 'normal' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          // Load the selection channel and paint white
+          await action.batchPlay(
+            [
+              {
+                _obj: 'set',
+                _target: [{ _ref: 'channel', _property: 'selection' }],
+                to: { _ref: 'channel', _name: channelName },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'fill',
+                using: { _enum: 'fillContents', _value: 'color' },
+                color: { _obj: 'RGBColor', red: 255, green: 255, blue: 255 },
+                opacity: 100,
+                mode: { _enum: 'blendMode', _value: 'normal' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          const tempFolder = await storage.localFileSystem.getTemporaryFolder()
+          const fileName = `mask_${Date.now()}.png`
+          const tempFile = await tempFolder.createFile(fileName, { overwrite: true })
+          const fileToken = storage.localFileSystem.createSessionToken(tempFile)
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'save',
+                as: {
+                  _obj: 'PNGFormat',
+                  method: { _enum: 'PNGMethod', _value: 'moderate' },
+                },
+                in: { _path: fileToken, _kind: 'local' },
+                copy: true,
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          await action.batchPlay(
+            [
+              {
+                _obj: 'close',
+                saving: { _enum: 'yesNo', _value: 'no' },
+                _options: { dialogOptions: 'dontDisplay' },
+              },
+            ],
+            { synchronousExecution: false },
+          )
+
+          const arrayBuffer = await tempFile.read({ format: storage.formats.binary })
+          const bytes = new Uint8Array(arrayBuffer as ArrayBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64 = btoa(binary)
+          resolve(base64)
+        } catch (error) {
+          reject(error)
+        }
+      },
+      { commandName: 'Export Selection Mask' },
+    )
+  })
+}
+
+/**
  * Maximum input image size for upscaling (longest edge in pixels).
  */
 const MAX_UPSCALE_INPUT_SIZE = 2048
