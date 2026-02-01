@@ -4,7 +4,7 @@ AI-powered image generation plugin for Adobe Photoshop.
 
 ## Structure
 
-- `packages/bridge/` - Python Bridge service (FastAPI)
+- `packages/ps-ai-diffusion-bridge/` - Python Bridge service (FastAPI or ComfyUI extension)
 - `packages/plugin/` - UXP Photoshop plugin (React + Vite)
 - `packages/shared/` - Shared core modules from krita-ai-diffusion
 

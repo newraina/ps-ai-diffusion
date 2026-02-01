@@ -1,4 +1,34 @@
-const BRIDGE_URL = 'http://localhost:7860'
+// Bridge API modes:
+// - ComfyUI extension (default): http://localhost:8188/api/ps-ai-diffusion-bridge
+// - Standalone service: http://localhost:7860/api
+
+const DEFAULT_COMFY_URL = 'http://localhost:8188'
+const COMFYUI_API_PREFIX = '/api/ps-ai-diffusion-bridge'
+const STANDALONE_API_PREFIX = '/api'
+
+let baseUrl = DEFAULT_COMFY_URL
+let apiPrefix = COMFYUI_API_PREFIX
+
+export function setBridgeMode(
+  mode: 'comfyui' | 'standalone',
+  comfyUrl: string = DEFAULT_COMFY_URL,
+) {
+  if (mode === 'comfyui') {
+    baseUrl = comfyUrl.replace(/\/$/, '')
+    apiPrefix = COMFYUI_API_PREFIX
+  } else {
+    baseUrl = 'http://localhost:7860'
+    apiPrefix = STANDALONE_API_PREFIX
+  }
+}
+
+export function getBridgeUrl(): string {
+  return `${baseUrl}${apiPrefix}`
+}
+
+function getApiUrl(path: string): string {
+  return `${baseUrl}${apiPrefix}${path}`
+}
 
 export interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -26,12 +56,12 @@ export interface GenerateResponse {
 }
 
 export async function getHealth(): Promise<{ status: string }> {
-  const response = await fetch(`${BRIDGE_URL}/api/health`)
+  const response = await fetch(getApiUrl('/health'))
   return response.json()
 }
 
 export async function getConnection(): Promise<ConnectionStatus> {
-  const response = await fetch(`${BRIDGE_URL}/api/connection`)
+  const response = await fetch(getApiUrl('/connection'))
   return response.json()
 }
 
@@ -40,7 +70,7 @@ export async function connect(
   comfyUrl?: string,
   authToken?: string,
 ): Promise<ConnectionStatus> {
-  const response = await fetch(`${BRIDGE_URL}/api/connection`, {
+  const response = await fetch(getApiUrl('/connection'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -76,42 +106,42 @@ export interface JobImages {
 export async function generate(
   request: GenerateRequest,
 ): Promise<GenerateResponse> {
-  const response = await fetch(`${BRIDGE_URL}/api/generate`, {
+  const response = await fetch(getApiUrl('/generate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Generation failed')
+    throw new Error(error.detail || error.error || 'Generation failed')
   }
   return response.json()
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}`)
+  const response = await fetch(getApiUrl(`/jobs/${jobId}`))
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Failed to get job status')
+    throw new Error(error.detail || error.error || 'Failed to get job status')
   }
   return response.json()
 }
 
 export async function getJobImages(jobId: string): Promise<JobImages> {
-  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}/images`)
+  const response = await fetch(getApiUrl(`/jobs/${jobId}/images`))
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Failed to get job images')
+    throw new Error(error.detail || error.error || 'Failed to get job images')
   }
   return response.json()
 }
 
 export async function cancelJob(jobId: string): Promise<void> {
-  const response = await fetch(`${BRIDGE_URL}/api/jobs/${jobId}/cancel`, {
+  const response = await fetch(getApiUrl(`/jobs/${jobId}/cancel`), {
     method: 'POST',
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Failed to cancel job')
+    throw new Error(error.detail || error.error || 'Failed to cancel job')
   }
 }

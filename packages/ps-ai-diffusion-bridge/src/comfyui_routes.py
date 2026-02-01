@@ -1,0 +1,101 @@
+"""ComfyUI extension routes using aiohttp.
+
+This module provides REST API endpoints when running as a ComfyUI extension.
+Routes are registered with ComfyUI's PromptServer.
+"""
+try:
+    from server import PromptServer
+    from aiohttp import web
+except ImportError:
+    # Not running inside ComfyUI
+    PromptServer = None
+    web = None
+
+from src.core.handlers import (
+    ApiResponse,
+    GenerateParams,
+    handle_health,
+    handle_get_connection,
+    handle_post_connection,
+    handle_generate,
+    handle_get_job,
+    handle_get_job_images,
+    handle_get_job_image,
+    handle_cancel_job,
+)
+
+API_PREFIX = "/api/ps-ai-diffusion-bridge"
+
+
+def _json_response(resp: ApiResponse) -> "web.Response":
+    """Convert ApiResponse to aiohttp json_response."""
+    return web.json_response(resp.data, status=resp.status)
+
+
+if PromptServer is not None:
+    routes = PromptServer.instance.routes
+
+    @routes.get(f"{API_PREFIX}/health")
+    async def health(request):
+        resp = await handle_health()
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/connection")
+    async def get_connection(request):
+        resp = await handle_get_connection()
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/connection")
+    async def post_connection(request):
+        data = await request.json()
+        resp = await handle_post_connection(
+            backend=data.get("backend", "local"),
+            comfy_url=data.get("comfy_url"),
+            auth_token=data.get("auth_token"),
+        )
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/generate")
+    async def generate(request):
+        data = await request.json()
+        params = GenerateParams(
+            prompt=data.get("prompt", ""),
+            negative_prompt=data.get("negative_prompt", ""),
+            width=data.get("width", 512),
+            height=data.get("height", 512),
+            steps=data.get("steps", 20),
+            cfg_scale=data.get("cfg_scale", 7.0),
+            seed=data.get("seed", -1),
+            model=data.get("model", ""),
+            batch_size=data.get("batch_size", 1),
+        )
+        resp = await handle_generate(params)
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/jobs/{{job_id}}")
+    async def get_job_status(request):
+        job_id = request.match_info["job_id"]
+        resp = await handle_get_job(job_id)
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/jobs/{{job_id}}/images")
+    async def get_job_images(request):
+        job_id = request.match_info["job_id"]
+        resp = await handle_get_job_images(job_id)
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/jobs/{{job_id}}/images/{{index}}")
+    async def get_job_image(request):
+        job_id = request.match_info["job_id"]
+        index = int(request.match_info["index"])
+        result = await handle_get_job_image(job_id, index)
+        if isinstance(result, ApiResponse):
+            return _json_response(result)
+        image_data, media_type = result
+        return web.Response(body=image_data, content_type=media_type)
+
+    @routes.post(f"{API_PREFIX}/jobs/{{job_id}}/cancel")
+    async def cancel_job(request):
+        job_id = request.match_info["job_id"]
+        resp = await handle_cancel_job(job_id)
+        return _json_response(resp)

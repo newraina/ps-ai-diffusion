@@ -1,5 +1,5 @@
 [project]
-name = "ps-ai-bridge"
+name = "ps-ai-diffusion-bridge"
 version = "0.1.0"
 description = "Python Bridge service for PS AI Diffusion"
 requires-python = ">=3.11"

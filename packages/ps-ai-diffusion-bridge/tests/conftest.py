@@ -1,5 +1,5 @@
 import pytest
-from src.state import state, ConnectionStatus, BackendType
+from src.core.state import state, ConnectionStatus, BackendType
 
 
 @pytest.fixture(autouse=True)

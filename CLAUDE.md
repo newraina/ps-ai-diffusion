@@ -8,20 +8,26 @@ AI-powered image generation plugin for Adobe Photoshop. Uses Stable Diffusion mo
 
 **Architecture:** Three independent components:
 - **UXP Plugin** (`packages/plugin/`) - React 18 + TypeScript UI running in Photoshop
-- **Python Bridge** (`packages/bridge/`) - FastAPI REST API service (port 7860)
+- **Python Bridge** (`packages/ps-ai-diffusion-bridge/`) - FastAPI REST API service (port 7860) or ComfyUI extension
 - **Shared Modules** (`packages/shared/`) - Core modules reused from krita-ai-diffusion via git subtree
 
-**Communication Flow:**
+**Communication Flow (Standalone Mode):**
 ```
 Photoshop UXP Plugin ←→ Python Bridge ←→ ComfyUI
                         (localhost:7860)  (localhost:8188)
 ```
 
+**Communication Flow (ComfyUI Extension Mode):**
+```
+Photoshop UXP Plugin ←→ ComfyUI (with ps-ai-diffusion-bridge extension)
+                        (localhost:8188)
+```
+
 ## Build & Development Commands
 
-### Python Bridge
+### Python Bridge (Standalone)
 ```bash
-cd packages/bridge
+cd packages/ps-ai-diffusion-bridge
 python -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
@@ -29,6 +35,14 @@ pip install -r requirements.txt
 # Run service
 python run.py
 # or: ./scripts/start-bridge.sh
+```
+
+### Python Bridge (ComfyUI Extension)
+```bash
+# Symlink to ComfyUI custom_nodes
+ln -s /path/to/packages/ps-ai-diffusion-bridge /path/to/ComfyUI/custom_nodes/ps-ai-diffusion-bridge
+
+# Restart ComfyUI - API available at /api/ps-ai-diffusion-bridge/*
 ```
 
 ### UXP Plugin
@@ -41,7 +55,7 @@ pnpm run build    # Production build
 
 ### Testing
 ```bash
-cd packages/bridge
+cd packages/ps-ai-diffusion-bridge
 source .venv/bin/activate
 PYTHONPATH=. pytest tests/ -v           # All tests
 PYTHONPATH=. pytest tests/test_health.py -v  # Single file
@@ -63,26 +77,37 @@ from shared.api import WorkflowInput
 ```
 
 ### State Management
-Global `AppState` dataclass in `src/state.py` tracks connection status, backend type, and errors.
+Global `AppState` dataclass in `src/core/state.py` tracks connection status, backend type, and errors.
 
 ### Async Pattern
 FastAPI uses async handlers with aiohttp for HTTP calls to ComfyUI.
 
-## API Endpoints (Bridge :7860)
+## API Endpoints
 
+**Standalone mode (Bridge :7860):**
 ```
-GET  /api/health      → {"status": "ok"}
-GET  /api/connection  → ConnectionStatus
-POST /api/connection  → Connect to backend
-POST /api/generate    → Submit generation task
+GET  /api/health                → {"status": "ok"}
+GET  /api/connection            → ConnectionStatus
+POST /api/connection            → Connect to backend
+POST /api/generate              → Submit generation task
+GET  /api/jobs/{job_id}         → Job status
+GET  /api/jobs/{job_id}/images  → Generated images (base64)
+POST /api/jobs/{job_id}/cancel  → Cancel job
 ```
+
+**ComfyUI extension mode (:8188):**
+Same endpoints, prefixed with `/api/ps-ai-diffusion-bridge/`
 
 ## Key Files
 
 | Path | Purpose |
 |------|---------|
-| `packages/bridge/src/main.py` | FastAPI app, endpoints |
-| `packages/bridge/src/generator.py` | WorkflowInput creation |
+| `packages/ps-ai-diffusion-bridge/src/fastapi_app.py` | FastAPI app, endpoints |
+| `packages/ps-ai-diffusion-bridge/src/comfyui_routes.py` | ComfyUI extension routes |
+| `packages/ps-ai-diffusion-bridge/src/core/handlers.py` | Framework-agnostic request handlers |
+| `packages/ps-ai-diffusion-bridge/src/core/state.py` | Global state management |
+| `packages/ps-ai-diffusion-bridge/src/core/comfy_client_manager.py` | ComfyUI client |
+| `packages/ps-ai-diffusion-bridge/src/generator.py` | WorkflowInput creation |
 | `packages/shared/api.py` | Data model definitions |
 | `packages/shared/comfy_client.py` | ComfyUI protocol |
 | `packages/plugin/src/app.tsx` | Root component |
