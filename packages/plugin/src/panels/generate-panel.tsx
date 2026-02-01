@@ -14,6 +14,8 @@ import {
   cancelJob,
 } from '../services/bridge-client'
 import { hasActiveDocument } from '../services/photoshop-layer'
+import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
+import { resolveStyleSampler } from '../utils/sampler-utils'
 import type { HistoryGroup, HistoryImage } from '../types'
 
 interface GeneratePanelProps {
@@ -68,13 +70,32 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     cancelledRef.current = false
 
     try {
+      // Apply style configuration
+      const finalPrompt = style
+        ? applyStylePrompt(style.style_prompt, prompt)
+        : prompt
+      const finalNegative = style
+        ? mergeNegativePrompts(style.negative_prompt, negativePrompt)
+        : negativePrompt
+      const checkpoint = style ? getStyleCheckpoint(style) : ''
+      const { sampler, scheduler } = style
+        ? resolveStyleSampler(style.sampler)
+        : { sampler: 'euler', scheduler: 'normal' }
+      const cfgScale = style?.cfg_scale ?? 7.0
+      const steps = style?.steps ?? 20
+
       // Submit generation job
       const response = await generate({
-        prompt,
-        negative_prompt: negativePrompt,
+        prompt: finalPrompt,
+        negative_prompt: finalNegative,
         width: 512,
         height: 512,
         batch_size: batchSize,
+        model: checkpoint,
+        sampler,
+        scheduler,
+        cfg_scale: cfgScale,
+        steps,
       })
 
       const jobId = response.job_id

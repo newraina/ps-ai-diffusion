@@ -50,6 +50,7 @@ export interface GenerateRequest {
   batch_size?: number
   sampler?: string
   scheduler?: string
+  model?: string
 }
 
 export interface GenerateResponse {
