@@ -48,6 +48,8 @@ export interface GenerateRequest {
   image?: string
   mask?: string
   batch_size?: number
+  sampler?: string
+  scheduler?: string
 }
 
 export interface GenerateResponse {
@@ -103,6 +105,22 @@ export interface JobImages {
   seeds: number[] // Seed used for each image
 }
 
+export interface StyleSummary {
+  id: string
+  name: string
+  architecture: string
+  sampler: string
+  cfg_scale: number
+  steps: number
+  style_prompt: string
+  negative_prompt: string
+  checkpoints: string[]
+}
+
+export interface StylesResponse {
+  styles: StyleSummary[]
+}
+
 export async function generate(
   request: GenerateRequest,
 ): Promise<GenerateResponse> {
@@ -144,4 +162,13 @@ export async function cancelJob(jobId: string): Promise<void> {
     const error = await response.json()
     throw new Error(error.detail || error.error || 'Failed to cancel job')
   }
+}
+
+export async function getStyles(): Promise<StylesResponse> {
+  const response = await fetch(getApiUrl('/styles'))
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to get styles')
+  }
+  return response.json()
 }
