@@ -8,6 +8,7 @@ import json
 import struct
 import uuid
 import logging
+from itertools import chain
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -23,6 +24,9 @@ class JobStatus(str, Enum):
     finished = "finished"
     error = "error"
     interrupted = "interrupted"
+
+
+DEFAULT_CHECKPOINT = "v1-5-pruned-emaonly.safetensors"
 
 
 @dataclass
@@ -41,199 +45,6 @@ class JobState:
     seed: int = 0  # Starting seed, each image uses seed + index
 
 
-def build_txt2img_workflow(
-    prompt: str,
-    negative_prompt: str = "",
-    width: int = 512,
-    height: int = 512,
-    steps: int = 20,
-    cfg_scale: float = 7.0,
-    seed: int = -1,
-    checkpoint: str = "",
-    batch_size: int = 1,
-    sampler: str = "euler",
-    scheduler: str = "normal",
-) -> tuple[dict, int]:
-    """Build a simple txt2img workflow for ComfyUI.
-
-    This is a basic SD1.5/SDXL compatible workflow.
-
-    Returns:
-        tuple of (workflow dict, actual seed used)
-    """
-    if seed < 0:
-        seed = int(uuid.uuid4().int % (2**31))
-
-    # Use default checkpoint if not specified
-    ckpt_name = checkpoint or "v1-5-pruned-emaonly.safetensors"
-
-    workflow = {
-        "1": {
-            "class_type": "CheckpointLoaderSimple",
-            "inputs": {
-                "ckpt_name": ckpt_name
-            }
-        },
-        "2": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": prompt,
-                "clip": ["1", 1]
-            }
-        },
-        "3": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": negative_prompt,
-                "clip": ["1", 1]
-            }
-        },
-        "4": {
-            "class_type": "EmptyLatentImage",
-            "inputs": {
-                "width": width,
-                "height": height,
-                "batch_size": batch_size
-            }
-        },
-        "5": {
-            "class_type": "KSampler",
-            "inputs": {
-                "seed": seed,
-                "steps": steps,
-                "cfg": cfg_scale,
-                "sampler_name": sampler,
-                "scheduler": scheduler,
-                "denoise": 1.0,
-                "model": ["1", 0],
-                "positive": ["2", 0],
-                "negative": ["3", 0],
-                "latent_image": ["4", 0]
-            }
-        },
-        "6": {
-            "class_type": "VAEDecode",
-            "inputs": {
-                "samples": ["5", 0],
-                "vae": ["1", 2]
-            }
-        },
-        "7": {
-            "class_type": "SaveImage",
-            "inputs": {
-                "filename_prefix": "ps_ai_diffusion",
-                "images": ["6", 0]
-            }
-        }
-    }
-
-    return workflow, seed
-
-
-def build_img2img_workflow(
-    image_filename: str,
-    prompt: str,
-    negative_prompt: str = "",
-    width: int = 512,
-    height: int = 512,
-    steps: int = 20,
-    cfg_scale: float = 7.0,
-    seed: int = -1,
-    checkpoint: str = "",
-    batch_size: int = 1,
-    sampler: str = "euler",
-    scheduler: str = "normal",
-    strength: float = 0.7,
-) -> tuple[dict, int]:
-    """Build an img2img workflow for ComfyUI.
-
-    Uses the input image as starting point and denoises from start_step.
-    Strength controls how much of the original image to preserve:
-    - strength=1.0: full denoise (like txt2img)
-    - strength=0.5: 50% denoise, preserve 50% of original
-    - strength=0.0: no denoise (return original)
-
-    Returns:
-        tuple of (workflow dict, actual seed used)
-    """
-    if seed < 0:
-        seed = int(uuid.uuid4().int % (2**31))
-
-    # Calculate start_step from strength
-    # strength=0.7 means denoise 70%, so start at 30% of steps
-    start_step = round(steps * (1 - strength))
-
-    # Use default checkpoint if not specified
-    ckpt_name = checkpoint or "v1-5-pruned-emaonly.safetensors"
-
-    workflow = {
-        "1": {
-            "class_type": "CheckpointLoaderSimple",
-            "inputs": {
-                "ckpt_name": ckpt_name
-            }
-        },
-        "2": {
-            "class_type": "LoadImage",
-            "inputs": {
-                "image": image_filename
-            }
-        },
-        "3": {
-            "class_type": "VAEEncode",
-            "inputs": {
-                "pixels": ["2", 0],
-                "vae": ["1", 2]
-            }
-        },
-        "4": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": prompt,
-                "clip": ["1", 1]
-            }
-        },
-        "5": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": negative_prompt,
-                "clip": ["1", 1]
-            }
-        },
-        "6": {
-            "class_type": "KSampler",
-            "inputs": {
-                "seed": seed,
-                "steps": steps,
-                "cfg": cfg_scale,
-                "sampler_name": sampler,
-                "scheduler": scheduler,
-                "denoise": 1.0,
-                "model": ["1", 0],
-                "positive": ["4", 0],
-                "negative": ["5", 0],
-                "latent_image": ["3", 0],
-                "start_at_step": start_step,
-                "end_at_step": steps,
-            }
-        },
-        "7": {
-            "class_type": "VAEDecode",
-            "inputs": {
-                "samples": ["6", 0],
-                "vae": ["1", 2]
-            }
-        },
-        "8": {
-            "class_type": "SaveImage",
-            "inputs": {
-                "filename_prefix": "ps_ai_diffusion",
-                "images": ["7", 0]
-            }
-        }
-    }
-
-    return workflow, seed
 
 
 class ComfyClientManager:
@@ -248,6 +59,12 @@ class ComfyClientManager:
         self._listener_task: Optional[asyncio.Task] = None
         self._is_connected: bool = False
         self._auth_token: Optional[str] = None
+        self._object_info: Optional[dict] = None
+        self._supports_etn: Optional[bool] = None
+        self._models = None
+        self._missing_nodes: list[str] = []
+        self._missing_required_models: list[str] = []
+        self._missing_optional_models: list[str] = []
 
     @property
     def is_connected(self) -> bool:
@@ -272,6 +89,9 @@ class ComfyClientManager:
                     raise Exception(f"Failed to connect: status {resp.status}")
                 data = await resp.json()
                 logger.info(f"Connected to ComfyUI: {data.get('devices', [])}")
+
+            # Validate environment and load models for shared workflow
+            await self._refresh_shared_models()
 
             # Start WebSocket listener
             self._listener_task = asyncio.create_task(self._listen_websocket())
@@ -324,81 +144,414 @@ class ComfyClientManager:
         if not self._session or not self._is_connected:
             raise Exception("Not connected to ComfyUI")
 
-        job_id = str(uuid.uuid4())
-
-        # Choose workflow based on whether image is provided
-        if image and strength < 1.0:
-            # img2img mode: upload image and use img2img workflow
-            image_filename = await self._upload_image(image)
-            workflow, actual_seed = build_img2img_workflow(
-                image_filename=image_filename,
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg_scale=cfg_scale,
-                seed=seed,
-                checkpoint=checkpoint,
-                batch_size=batch_size,
-                sampler=sampler,
-                scheduler=scheduler,
-                strength=strength,
-            )
-        else:
-            # txt2img mode
-            workflow, actual_seed = build_txt2img_workflow(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg_scale=cfg_scale,
-                seed=seed,
-                checkpoint=checkpoint,
-                batch_size=batch_size,
-                sampler=sampler,
-                scheduler=scheduler,
-            )
-
-        # Initialize job state
-        self.jobs[job_id] = JobState(
-            status=JobStatus.queued,
-            node_count=len(workflow),
-            sample_count=steps,
+        return await self._enqueue_shared_workflow(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            seed=seed,
+            checkpoint=checkpoint,
             batch_size=batch_size,
+            sampler=sampler,
+            scheduler=scheduler,
+            image=image,
+            strength=strength,
+        )
+
+    async def _enqueue_shared_workflow(
+        self,
+        prompt: str,
+        negative_prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        cfg_scale: float,
+        seed: int,
+        checkpoint: str,
+        batch_size: int,
+        sampler: str,
+        scheduler: str,
+        image: Optional[str],
+        strength: float,
+    ) -> str | None:
+        """Enqueue a job using shared workflow and ETN nodes."""
+        await self._require_shared_nodes()
+
+        import base64
+        import random
+        import src.path_setup  # noqa: F401
+
+        from shared.api import (
+            WorkflowInput,
+            WorkflowKind,
+            ImageInput,
+            ExtentInput,
+            SamplingInput,
+            ConditioningInput,
+            CheckpointInput,
+        )
+        from shared.image import Extent, Image
+        from shared.workflow import create as create_workflow
+        from shared.comfy_workflow import ComfyRunMode
+        from src.shared_shim.client import resolve_arch
+
+        actual_seed = seed if seed >= 0 else random.randint(0, 2**31 - 1)
+        ckpt_name = checkpoint or DEFAULT_CHECKPOINT
+        arch = resolve_arch(ckpt_name)
+
+        if self._models is None:
+            await self._refresh_shared_models()
+        assert self._models is not None
+        if ckpt_name not in self._models.checkpoints:
+            raise RuntimeError(f"Checkpoint not found: {ckpt_name}")
+
+        extent = Extent(width, height)
+        extent_input = ExtentInput(
+            input=extent,
+            initial=extent,
+            desired=extent,
+            target=extent,
+        )
+
+        kind = WorkflowKind.generate
+        images = ImageInput(extent=extent_input)
+        if image and strength < 1.0:
+            kind = WorkflowKind.refine
+            image_b64 = image.split(",", 1)[1] if "," in image else image
+            image_bytes = base64.b64decode(image_b64)
+            images.initial_image = Image.from_bytes(image_bytes)
+
+        sampling = SamplingInput(
+            sampler=sampler,
+            scheduler=scheduler,
+            cfg_scale=cfg_scale,
+            total_steps=steps,
+            start_step=0 if strength >= 1.0 else int(steps * (1 - strength)),
             seed=actual_seed,
         )
 
-        # Submit to ComfyUI
+        conditioning = ConditioningInput(
+            positive=prompt,
+            negative=negative_prompt or "",
+        )
+
+        work = WorkflowInput(
+            kind=kind,
+            images=images,
+            sampling=sampling,
+            conditioning=conditioning,
+            models=CheckpointInput(checkpoint=ckpt_name, version=arch),
+            batch_count=batch_size,
+        )
+
+        return await self.enqueue_workflow(work, batch_size=batch_size, seed=actual_seed)
+
+    async def _get_object_info(self) -> dict | None:
+        """Fetch ComfyUI /object_info and cache it."""
+        if self._object_info is not None:
+            return self._object_info
+        if not self._session:
+            return None
+        try:
+            async with self._session.get(
+                f"{self.url}/object_info",
+                timeout=30,
+            ) as resp:
+                if resp.status == 200:
+                    self._object_info = await resp.json()
+                    return self._object_info
+        except Exception as e:
+            logger.debug("Failed to fetch object_info: %s", e)
+        return None
+
+    async def _get_model_info(self, folder_name: str) -> dict | None:
+        """Fetch model info via ETN endpoint if available."""
+        if not self._session:
+            return None
+        try:
+            offset = 0
+            total = 100
+            results: dict = {}
+            while offset < total:
+                async with self._session.get(
+                    f"{self.url}/api/etn/model_info/{folder_name}?offset={offset}&limit=8",
+                    timeout=30,
+                ) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+                    if "_meta" not in data:
+                        return data
+                    total = data["_meta"]["total"]
+                    del data["_meta"]
+                    results.update(data)
+                    offset += 8
+            return results
+        except Exception:
+            return None
+
+    @staticmethod
+    def _compute_missing_nodes(nodes, required_custom_nodes) -> list[str]:
+        missing = []
+        for node in required_custom_nodes:
+            for name in node.nodes:
+                if name not in nodes:
+                    missing.append(name)
+        return sorted(set(missing))
+
+    @staticmethod
+    def _compute_missing_models(
+        models,
+        required_models,
+        default_checkpoints,
+        upscale_models,
+        optional_models,
+        ResourceKind,
+    ) -> tuple[list[str], list[str]]:
+        missing_required = []
+        for model in chain(required_models, default_checkpoints, upscale_models):
+            if model.id.kind is ResourceKind.checkpoint:
+                if model.filename not in models.checkpoints:
+                    missing_required.append(model.id.string)
+            elif models.find(model.id) is None:
+                missing_required.append(model.id.string)
+
+        missing_optional = []
+        for model in optional_models:
+            if model.id.kind is ResourceKind.checkpoint:
+                if model.filename not in models.checkpoints:
+                    missing_optional.append(model.id.string)
+            elif models.find(model.id) is None:
+                missing_optional.append(model.id.string)
+
+        return sorted(set(missing_required)), sorted(set(missing_optional))
+
+    async def get_diagnostics(self) -> dict:
+        """Collect missing node/model diagnostics for shared workflow."""
+        if not self._session or not self._is_connected:
+            return {
+                "connected": False,
+                "error": "Not connected to ComfyUI",
+                "missing_nodes": [],
+                "missing_required_models": [],
+                "missing_optional_models": [],
+            }
+
+        import src.path_setup  # noqa: F401
+
+        from shared.comfy_workflow import ComfyObjectInfo
+        from shared.resources import (
+            required_custom_nodes,
+            required_models,
+            default_checkpoints,
+            upscale_models,
+            optional_models,
+            ResourceKind,
+        )
+        from src.shared_shim.client import build_client_models
+
+        object_info = await self._get_object_info()
+        if not object_info:
+            return {
+                "connected": True,
+                "error": "ComfyUI /object_info is unavailable",
+                "missing_nodes": [],
+                "missing_required_models": [],
+                "missing_optional_models": [],
+            }
+
+        nodes = ComfyObjectInfo(object_info)
+        missing_nodes = self._compute_missing_nodes(nodes, required_custom_nodes)
+
+        checkpoints_info = await self._get_model_info("checkpoints")
+        diffusion_info = await self._get_model_info("diffusion_models")
+        models = build_client_models(nodes, checkpoints_info, diffusion_info)
+        missing_required, missing_optional = self._compute_missing_models(
+            models,
+            required_models,
+            default_checkpoints,
+            upscale_models,
+            optional_models,
+            ResourceKind,
+        )
+
+        return {
+            "connected": True,
+            "missing_nodes": missing_nodes,
+            "missing_required_models": missing_required,
+            "missing_optional_models": missing_optional,
+        }
+
+    async def _refresh_shared_models(self) -> None:
+        import src.path_setup  # noqa: F401
+
+        from shared.comfy_workflow import ComfyObjectInfo
+        from shared.resources import (
+            required_custom_nodes,
+            required_models,
+            default_checkpoints,
+            upscale_models,
+            optional_models,
+            ResourceKind,
+        )
+        from src.shared_shim.client import build_client_models
+        from src.shared_shim.files import FileLibrary
+
+        object_info = await self._get_object_info()
+        if not object_info:
+            raise RuntimeError("ComfyUI /object_info is unavailable.")
+
+        nodes = ComfyObjectInfo(object_info)
+        missing_nodes = self._compute_missing_nodes(nodes, required_custom_nodes)
+        self._missing_nodes = missing_nodes
+        if missing_nodes:
+            missing_list = ", ".join(missing_nodes)
+            raise RuntimeError(
+                "Missing required ComfyUI nodes for shared workflow: "
+                f"{missing_list}. Install required custom nodes."
+            )
+
+        checkpoints_info = await self._get_model_info("checkpoints")
+        diffusion_info = await self._get_model_info("diffusion_models")
+        self._models = build_client_models(nodes, checkpoints_info, diffusion_info)
+
+        library = FileLibrary.instance()
+        library.set_loras(self._models.loras)
+        library.set_checkpoints(list(self._models.checkpoints.keys()))
+
+        missing_required, missing_optional = self._compute_missing_models(
+            self._models,
+            required_models,
+            default_checkpoints,
+            upscale_models,
+            optional_models,
+            ResourceKind,
+        )
+        self._missing_required_models = missing_required
+        self._missing_optional_models = missing_optional
+        if missing_required:
+            missing_list = ", ".join(missing_required)
+            raise RuntimeError(f"Missing required models: {missing_list}")
+
+        if missing_optional:
+            logger.warning(
+                "Missing optional models: %s",
+                ", ".join(missing_optional),
+            )
+
+
+    async def _require_shared_nodes(self) -> None:
+        if self._supports_etn is True:
+            return
+        info = await self._get_object_info()
+        if not info:
+            raise RuntimeError(
+                "ComfyUI /object_info is unavailable. Shared-only workflow requires comfyui-tooling-nodes."
+            )
+        required = {"ETN_LoadImageCache", "ETN_SaveImageCache"}
+        missing = required.difference(set(info.keys()))
+        if missing:
+            missing_list = ", ".join(sorted(missing))
+            raise RuntimeError(
+                "Missing required ComfyUI nodes for shared workflow: "
+                f"{missing_list}. Install comfyui-tooling-nodes."
+            )
+        self._supports_etn = True
+
+    async def _upload_etn_images(self, image_data: dict[str, bytes]) -> None:
+        """Upload input images for ETN_LoadImageCache."""
+        if not image_data or not self._session:
+            return
+        for image_id, data in image_data.items():
+            async with self._session.put(
+                f"{self.url}/api/etn/image/{image_id}",
+                data=data,
+                timeout=60,
+            ) as resp:
+                if resp.status >= 400:
+                    error_text = await resp.text()
+                    raise Exception(
+                        f"Failed to upload ETN image {image_id}: {error_text}"
+                    )
+
+    async def _fetch_etn_image(self, image_id: str) -> bytes | None:
+        """Fetch an ETN cached image by id."""
+        if not self._session:
+            return None
+        async with self._session.get(
+            f"{self.url}/api/etn/image/{image_id}",
+            timeout=120,
+        ) as resp:
+            if resp.status == 200:
+                return await resp.read()
+            return None
+
+    async def enqueue_workflow(
+        self,
+        work,
+        batch_size: int = 1,
+        seed: int = 0,
+    ) -> str:
+        """Submit a prepared WorkflowInput using shared workflow."""
+        if not self._session or not self._is_connected:
+            raise Exception("Not connected to ComfyUI")
+
+        await self._require_shared_nodes()
+        if self._models is None:
+            await self._refresh_shared_models()
+        assert self._models is not None
+
+        from shared.api import CheckpointInput
+        from shared.comfy_workflow import ComfyRunMode
+        from shared.workflow import create as create_workflow
+        from src.shared_shim.client import resolve_arch
+
+        if work.models is None or not work.models.checkpoint:
+            work.models = CheckpointInput(
+                checkpoint=DEFAULT_CHECKPOINT,
+                version=resolve_arch(DEFAULT_CHECKPOINT),
+            )
+
+        if work.models.checkpoint not in self._models.checkpoints:
+            raise RuntimeError(f"Checkpoint not found: {work.models.checkpoint}")
+
+        workflow = create_workflow(work, self._models, comfy_mode=ComfyRunMode.server)
+        await self._upload_etn_images(workflow.image_data)
+
+        job_id = str(uuid.uuid4())
+        sample_count = workflow.sample_count or workflow.guess_sample_count()
         data = {
-            "prompt": workflow,
+            "prompt": workflow.root,
             "client_id": self.client_id,
             "prompt_id": job_id,
         }
 
-        try:
-            async with self._session.post(
-                f"{self.url}/prompt",
-                json=data,
-                timeout=30
-            ) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    raise Exception(f"Failed to submit job: {error_text}")
-                result = await resp.json()
-
-                # Verify prompt_id matches
-                if result.get("prompt_id") != job_id:
-                    logger.warning(f"Prompt ID mismatch: expected {job_id}, got {result.get('prompt_id')}")
-
-                logger.info(f"Job {job_id} submitted successfully")
-                return job_id
-
-        except Exception as e:
-            self.jobs[job_id].status = JobStatus.error
-            self.jobs[job_id].error = str(e)
-            raise
+        async with self._session.post(
+            f"{self.url}/prompt",
+            json=data,
+            timeout=30,
+        ) as resp:
+            if resp.status != 200:
+                error_text = await resp.text()
+                raise Exception(f"Failed to submit job: {error_text}")
+            result = await resp.json()
+            if result.get("prompt_id") != job_id:
+                logger.warning(
+                    "Prompt ID mismatch: expected %s, got %s",
+                    job_id,
+                    result.get("prompt_id"),
+                )
+            self.jobs[job_id] = JobState(
+                status=JobStatus.queued,
+                node_count=len(workflow.root),
+                sample_count=sample_count,
+                batch_size=batch_size,
+                seed=seed,
+            )
+            logger.info("Shared workflow job %s submitted successfully", job_id)
+            return job_id
 
     def get_job(self, job_id: str) -> Optional[JobState]:
         """Get job state by ID."""
@@ -414,88 +567,27 @@ class ComfyClientManager:
         if not self._session or not self._is_connected:
             raise Exception("Not connected to ComfyUI")
 
-        from .upscaler import build_upscale_workflow
+        await self._require_shared_nodes()
 
-        job_id = str(uuid.uuid4())
-
-        # Upload image to ComfyUI input folder via API
-        image_filename = await self._upload_image(image_base64)
-
-        # Build workflow
-        workflow = build_upscale_workflow(
-            image_filename=image_filename,
-            factor=factor,
-            model=model,
-        )
-
-        # Initialize job state (no sampling steps for upscale)
-        self.jobs[job_id] = JobState(
-            status=JobStatus.queued,
-            node_count=len(workflow),
-            sample_count=1,  # No sampling, just one pass
-            batch_size=1,
-            seed=0,
-        )
-
-        # Submit to ComfyUI
-        data = {
-            "prompt": workflow,
-            "client_id": self.client_id,
-            "prompt_id": job_id,
-        }
-
-        try:
-            async with self._session.post(
-                f"{self.url}/prompt",
-                json=data,
-                timeout=30
-            ) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    raise Exception(f"Failed to submit job: {error_text}")
-                result = await resp.json()
-
-                if result.get("prompt_id") != job_id:
-                    logger.warning(f"Prompt ID mismatch: expected {job_id}, got {result.get('prompt_id')}")
-
-                logger.info(f"Upscale job {job_id} submitted successfully")
-                return job_id
-
-        except Exception as e:
-            self.jobs[job_id].status = JobStatus.error
-            self.jobs[job_id].error = str(e)
-            raise
-
-    async def _upload_image(self, image_base64: str) -> str:
-        """Upload a base64 image to ComfyUI and return the filename."""
         import base64
+        import src.path_setup  # noqa: F401
 
-        # Strip data URL prefix if present
-        if "," in image_base64:
-            image_base64 = image_base64.split(",")[1]
+        from shared.image import Image
+        from shared.workflow import prepare_upscale_simple
+        from .upscaler import DEFAULT_UPSCALE_MODEL
 
-        image_data = base64.b64decode(image_base64)
-        filename = f"ps_upscale_{uuid.uuid4().hex[:8]}.png"
+        image_b64 = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
+        image_bytes = base64.b64decode(image_b64)
+        image = Image.from_bytes(image_bytes)
 
-        # Use ComfyUI's upload API
-        form_data = aiohttp.FormData()
-        form_data.add_field(
-            'image',
-            image_data,
-            filename=filename,
-            content_type='image/png'
-        )
+        model_name = model or DEFAULT_UPSCALE_MODEL
+        work = prepare_upscale_simple(image=image, model=model_name, factor=factor)
 
-        async with self._session.post(
-            f"{self.url}/upload/image",
-            data=form_data,
-            timeout=60
-        ) as resp:
-            if resp.status != 200:
-                error_text = await resp.text()
-                raise Exception(f"Failed to upload image: {error_text}")
-            result = await resp.json()
-            return result.get("name", filename)
+        if self._models is None:
+            await self._refresh_shared_models()
+        assert self._models is not None
+
+        return await self.enqueue_workflow(work, batch_size=1, seed=0)
 
     async def cancel(self, job_id: str) -> bool:
         """Cancel a job."""
@@ -625,6 +717,18 @@ class ComfyClientManager:
     async def _fetch_result_image(self, job_id: str, img_info: dict):
         """Fetch a result image from ComfyUI."""
         if not self._session:
+            return
+
+        source = img_info.get("source")
+        image_id = img_info.get("id")
+        if source == "http" and image_id:
+            try:
+                image_data = await self._fetch_etn_image(image_id)
+                if image_data and job_id in self.jobs:
+                    self.jobs[job_id].images.append(image_data)
+                    logger.info(f"Fetched ETN image for job {job_id}: {image_id}")
+            except Exception as e:
+                logger.error(f"Failed to fetch ETN image {image_id}: {e}")
             return
 
         filename = img_info.get("filename")

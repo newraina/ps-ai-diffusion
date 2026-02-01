@@ -5,8 +5,6 @@ from .comfy_client_manager import (
     get_manager,
     JobStatus,
     JobState,
-    build_txt2img_workflow,
-    build_img2img_workflow,
 )
 from .handlers import (
     ApiResponse,
@@ -32,8 +30,6 @@ __all__ = [
     "get_manager",
     "JobStatus",
     "JobState",
-    "build_txt2img_workflow",
-    "build_img2img_workflow",
     # Handlers
     "ApiResponse",
     "GenerateParams",

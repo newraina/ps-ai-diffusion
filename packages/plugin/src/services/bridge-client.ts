@@ -61,6 +61,15 @@ export interface ConnectionStatus {
   news?: CloudNews | null
 }
 
+export interface DiagnosticsResponse {
+  backend?: 'local' | 'cloud'
+  connected: boolean
+  error?: string
+  missing_nodes: string[]
+  missing_required_models: string[]
+  missing_optional_models: string[]
+}
+
 export interface GenerateRequest {
   prompt: string
   negative_prompt?: string
@@ -115,6 +124,11 @@ export async function getHealth(): Promise<{ status: string }> {
 
 export async function getConnection(): Promise<ConnectionStatus> {
   const response = await fetch(getApiUrl('/connection'))
+  return response.json()
+}
+
+export async function getDiagnostics(): Promise<DiagnosticsResponse> {
+  const response = await fetch(getApiUrl('/diagnostics'))
   return response.json()
 }
 

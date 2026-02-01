@@ -9,7 +9,9 @@ import {
 } from '../services/settings'
 import {
   type CloudUser,
+  type DiagnosticsResponse,
   getConnection,
+  getDiagnostics,
   setBridgeMode,
   testConnection,
   signIn,
@@ -42,6 +44,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     success: boolean
     message: string
   } | null>(null)
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null)
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
 
   // Cloud auth state
   const [cloudAuthStatus, setCloudAuthStatus] = useState<CloudAuthStatus>('idle')
@@ -272,14 +277,50 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       newSettings.comfyUrl = 'http://localhost:7860'
     }
     setSettings(newSettings)
+    setDiagnostics(null)
+    setDiagnosticsError(null)
   }
 
   function handleBackendChange(backend: BackendType) {
     setSettings(prev => ({ ...prev, backendType: backend }))
     setTestResult(null)
+    setDiagnostics(null)
+    setDiagnosticsError(null)
   }
 
   const isCloudMode = settings.backendType === 'cloud'
+
+  async function handleDiagnostics() {
+    setDiagnosticsLoading(true)
+    setDiagnosticsError(null)
+
+    setBridgeMode(
+      settings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
+      settings.comfyUrl,
+    )
+
+    try {
+      const result = await getDiagnostics()
+      setDiagnostics(result)
+    } catch (e) {
+      setDiagnosticsError(String(e))
+    } finally {
+      setDiagnosticsLoading(false)
+    }
+  }
+
+  function renderDiagnosticsList(items: string[], emptyLabel: string) {
+    if (!items || items.length === 0) {
+      return <sp-body size="XS" className="diagnostics-empty">{emptyLabel}</sp-body>
+    }
+    return (
+      <ul className="diagnostics-list">
+        {items.map(item => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    )
+  }
 
   return (
     <dialog ref={dialogRef} className="settings-dialog">
@@ -481,6 +522,54 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   }))
                 }
               />
+            </div>
+
+            <div className="form-field diagnostics-field">
+              <label>Diagnostics</label>
+              <div className="diagnostics-actions">
+                <Button
+                  size="s"
+                  variant="secondary"
+                  onClick={handleDiagnostics}
+                  disabled={diagnosticsLoading}
+                >
+                  {diagnosticsLoading ? 'Running...' : 'Run Diagnostics'}
+                </Button>
+                {diagnostics && (
+                  <sp-body
+                    size="XS"
+                    className={`diagnostics-status ${diagnostics.connected ? 'connected' : 'error'}`}
+                  >
+                    {diagnostics.connected ? 'Connected' : 'Not connected'}
+                  </sp-body>
+                )}
+              </div>
+              {diagnosticsError && (
+                <sp-body size="S" className="test-result error">
+                  {diagnosticsError}
+                </sp-body>
+              )}
+              {diagnostics?.error && (
+                <sp-body size="S" className="test-result error">
+                  {diagnostics.error}
+                </sp-body>
+              )}
+              {diagnostics && !diagnostics.error && (
+                <div className="diagnostics-results">
+                  <div className="diagnostics-block">
+                    <span className="diagnostics-label">Missing nodes</span>
+                    {renderDiagnosticsList(diagnostics.missing_nodes, 'None')}
+                  </div>
+                  <div className="diagnostics-block">
+                    <span className="diagnostics-label">Missing required models</span>
+                    {renderDiagnosticsList(diagnostics.missing_required_models, 'None')}
+                  </div>
+                  <div className="diagnostics-block">
+                    <span className="diagnostics-label">Missing optional models</span>
+                    {renderDiagnosticsList(diagnostics.missing_optional_models, 'None')}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

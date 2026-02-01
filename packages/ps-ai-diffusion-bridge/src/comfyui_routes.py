@@ -17,6 +17,7 @@ from src.core.handlers import (
     UpscaleParams,
     handle_health,
     handle_get_connection,
+    handle_get_diagnostics,
     handle_post_connection,
     handle_generate,
     handle_get_job,
@@ -49,6 +50,11 @@ if PromptServer is not None:
     @routes.get(f"{API_PREFIX}/connection")
     async def get_connection(request):
         resp = await handle_get_connection()
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/diagnostics")
+    async def get_diagnostics(request):
+        resp = await handle_get_diagnostics()
         return _json_response(resp)
 
     @routes.post(f"{API_PREFIX}/connection")

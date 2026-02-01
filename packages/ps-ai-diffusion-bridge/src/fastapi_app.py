@@ -16,6 +16,7 @@ from src.core.handlers import (
     UpscaleParams,
     handle_health,
     handle_get_connection,
+    handle_get_diagnostics,
     handle_post_connection,
     handle_generate,
     handle_get_job,
@@ -190,6 +191,12 @@ async def auth_validate(request: AuthValidateRequest):
 @app.get("/api/connection")
 async def get_connection():
     resp = await handle_get_connection()
+    return resp.data
+
+
+@app.get("/api/diagnostics")
+async def get_diagnostics():
+    resp = await handle_get_diagnostics()
     return resp.data
 
 

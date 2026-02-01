@@ -950,6 +950,68 @@ button:disabled {
 }
 
 /* ==================== */
+/* Diagnostics */
+/* ==================== */
+
+.diagnostics-field {
+  margin-top: 12px;
+}
+
+.diagnostics-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.diagnostics-actions > * + * {
+  margin-left: 8px;
+}
+
+.diagnostics-status {
+  font-size: 11px;
+  color: #999;
+}
+
+.diagnostics-status.connected {
+  color: #4caf50;
+}
+
+.diagnostics-status.error {
+  color: #f36c6c;
+}
+
+.diagnostics-results {
+  margin-top: 8px;
+  background: #2f2f2f;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.diagnostics-block + .diagnostics-block {
+  margin-top: 8px;
+}
+
+.diagnostics-label {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.diagnostics-list {
+  margin: 0 0 0 16px;
+  padding: 0;
+  font-size: 11px;
+  color: #d0d0d0;
+}
+
+.diagnostics-empty {
+  font-size: 11px;
+  color: #666;
+}
+
+/* ==================== */
 /* Cloud Panel */
 /* ==================== */
 

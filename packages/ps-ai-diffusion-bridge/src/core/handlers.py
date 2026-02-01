@@ -14,7 +14,7 @@ from .comfy_client_manager import get_manager, JobStatus
 from .cloud_client_manager import cloud_manager
 from .cloud_types import CloudJobStatus
 from .styles import load_styles, get_style_summary
-from .upscaler import build_upscale_workflow, DEFAULT_UPSCALE_MODEL, MAX_INPUT_SIZE
+from .upscaler import DEFAULT_UPSCALE_MODEL
 
 
 DEFAULT_COMFY_URL = "http://localhost:8188"
@@ -210,6 +210,24 @@ async def handle_get_connection() -> ApiResponse:
         })
 
 
+async def handle_get_diagnostics() -> ApiResponse:
+    """Handle diagnostics request for local backend."""
+    if state.backend_type == BackendType.cloud:
+        return ApiResponse(data={
+            "backend": state.backend_type.value,
+            "connected": False,
+            "missing_nodes": [],
+            "missing_required_models": [],
+            "missing_optional_models": [],
+            "error": "Diagnostics only available for local backend",
+        })
+
+    manager = get_manager()
+    diagnostics = await manager.get_diagnostics()
+    diagnostics["backend"] = state.backend_type.value
+    return ApiResponse(data=diagnostics)
+
+
 async def handle_post_connection(
     backend: str = "local",
     comfy_url: Optional[str] = None,
@@ -300,20 +318,11 @@ async def _handle_generate_local(params: GenerateParams) -> ApiResponse:
         )
 
     try:
-        job_id = await manager.enqueue(
-            prompt=params.prompt,
-            negative_prompt=params.negative_prompt,
-            width=params.width,
-            height=params.height,
-            steps=params.steps,
-            cfg_scale=params.cfg_scale,
-            seed=params.seed,
-            checkpoint=params.model,
+        work, _ = _build_workflow_input(params)
+        job_id = await manager.enqueue_workflow(
+            work,
             batch_size=params.batch_size,
-            sampler=params.sampler,
-            scheduler=params.scheduler,
-            image=params.image,
-            strength=params.strength,
+            seed=work.sampling.seed if work.sampling else 0,
         )
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
     except Exception as e:
@@ -544,9 +553,7 @@ def _build_workflow_input(params: GenerateParams):
             region_mask = Image.from_bytes(mask_bytes)
             if not region_mask.is_mask:
                 # Best-effort conversion to grayscale
-                from PyQt5.QtGui import QImage  # type: ignore
-
-                region_mask._qimage = region_mask._qimage.convertToFormat(QImage.Format_Grayscale8)
+                region_mask = region_mask.to_grayscale()
 
             bounds_data = region_entry.get("bounds")
             if isinstance(bounds_data, dict):
@@ -637,9 +644,7 @@ def _build_workflow_input(params: GenerateParams):
         mask_img = Image.from_bytes(mask_bytes)
         if not mask_img.is_mask:
             # Ensure grayscale mask
-            from PyQt5.QtGui import QImage  # type: ignore
-
-            mask_img._qimage = mask_img._qimage.convertToFormat(QImage.Format.Format_Grayscale8)
+            mask_img = mask_img.to_grayscale()
 
         # Compute bounds from non-zero pixels; fall back to full image bounds.
         raw = bytes(mask_img.data)
