@@ -14,6 +14,7 @@ from src.core.handlers import (
     ApiResponse,
     GenerateParams,
     UpscaleParams,
+    ControlImageParams,
     handle_health,
     handle_get_connection,
     handle_get_diagnostics,
@@ -25,6 +26,7 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_control_image,
     handle_custom_workflow,
     handle_auth_sign_in,
     handle_auth_confirm,
@@ -117,11 +119,24 @@ class GenerateRequest(BaseModel):
     loras: list[LoraRequest] = []
     control: list[ControlRequest] = []
     regions: list[RegionRequest] = []
+    performance: Optional[dict] = None
 
 
 class GenerateResponse(BaseModel):
     job_id: str
     status: str
+
+
+class ControlImageRequest(BaseModel):
+    mode: str
+    image: str
+    bounds: Optional[dict] = None
+    seed: int = -1
+    performance: Optional[dict] = None
+
+
+class ControlImageResponse(BaseModel):
+    image: str
 
 
 class UpscaleRequest(BaseModel):
@@ -266,8 +281,24 @@ async def generate(request: GenerateRequest):
         loras=[l.model_dump() for l in request.loras] if request.loras else [],
         control=[c.model_dump() for c in request.control] if request.control else [],
         regions=[r.model_dump() for r in request.regions] if request.regions else [],
+        performance=request.performance,
     )
     resp = await handle_generate(params)
+    if resp.status != 200:
+        raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+@app.post("/api/control-image", response_model=ControlImageResponse)
+async def control_image(request: ControlImageRequest):
+    params = ControlImageParams(
+        mode=request.mode,
+        image=request.image,
+        bounds=request.bounds,
+        seed=request.seed,
+        performance=request.performance,
+    )
+    resp = await handle_control_image(params)
     if resp.status != 200:
         raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
     return resp.data

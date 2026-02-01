@@ -18,10 +18,13 @@ import {
   getJobStatus,
   getJobImages,
   cancelJob,
+  createControlImage,
 } from '../services/bridge-client'
 import { hasActiveDocument, hasActiveSelection, getSelectionMaskBase64, getDocumentImageBase64, getLayerImageBase64 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
+import { applyAutoResize, applyPromptTranslation } from '../utils/generation-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
+import { buildRegionArgs } from '../utils/region-utils'
 import { openBrowser } from '../utils/uxp'
 import { getSettings } from '../services/settings'
 import type { GenerationSnapshot, HistoryGroup, HistoryImage, QueueItem } from '../types'
@@ -183,12 +186,15 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         }
       }
 
+      const settings = getSettings()
+      const translatedPrompt = applyPromptTranslation(snapshot.prompt, settings)
+      const translatedNegative = applyPromptTranslation(snapshot.negativePrompt, settings)
       const finalPrompt = snapshot.style
-        ? applyStylePrompt(snapshot.style.style_prompt, snapshot.prompt)
-        : snapshot.prompt
+        ? applyStylePrompt(snapshot.style.style_prompt, translatedPrompt)
+        : translatedPrompt
       const finalNegative = snapshot.style
-        ? mergeNegativePrompts(snapshot.style.negative_prompt, snapshot.negativePrompt)
-        : snapshot.negativePrompt
+        ? mergeNegativePrompts(snapshot.style.negative_prompt, translatedNegative)
+        : translatedNegative
       const checkpoint = snapshot.style ? getStyleCheckpoint(snapshot.style) : ''
       const resolvedStyleSampler = snapshot.style
         ? resolveStyleSampler(snapshot.style.sampler)
@@ -232,11 +238,26 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
             const image = layer.image
               ? layer.image
               : await getLayerImageBase64(layer.layerId!)
+            const bounds = layer.layerId
+              ? await import('../services/photoshop-layer').then(m => m.getLayerBounds(layer.layerId!))
+              : null
+            const processedImage = layer.isPreprocessor
+              ? (await createControlImage({
+                mode: mapControlMode(layer.mode),
+                image,
+                bounds: bounds || undefined,
+                seed: snapshot.fixedSeed ? snapshot.seed : -1,
+                performance: {
+                  max_pixels: settings.maxPixels,
+                  resolution_multiplier: settings.resolutionMultiplier,
+                },
+              })).image
+              : image
             controlNetArgs.push({
               mode: mapControlMode(layer.mode),
-              image: image,
+              image: processedImage,
               strength: layer.strength,
-              range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1],
+              range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1] as [number, number],
               preprocessor: layer.isPreprocessor,
             })
           } catch (e) {
@@ -246,52 +267,19 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         }
       }
 
-      const regionArgs = []
-      const activeRegions = snapshot.regions.filter(r => r.isVisible && r.prompt.trim())
-      if (activeRegions.length > 0) {
+      let regionArgs = []
+      if (snapshot.regions.some(r => r.isVisible && r.prompt.trim())) {
         setProgress(0, 'Processing regions...')
-        // Lazy import to avoid circular dependency issues.
-        const {
-          getSelectionBounds,
-          getLayerBounds,
-          getLayerTransparencyMaskBase64,
-        } = await import('../services/photoshop-layer')
-
-        for (const region of activeRegions) {
-          let mask = region.maskBase64
-          let bounds = region.bounds
-
-          // Best-effort capture if user hasn't captured explicitly.
-          if (!mask) {
-            if (region.maskSource === 'selection') {
-              mask = await getSelectionMaskBase64()
-              bounds = await getSelectionBounds()
-            } else if (region.maskSource === 'layer' && region.layerId) {
-              bounds = await getLayerBounds(region.layerId)
-              mask = await getLayerTransparencyMaskBase64(region.layerId)
-            }
-          }
-
-          if (!mask) {
-            console.warn(`Skipping region "${region.name}" - no mask available`)
-            continue
-          }
-
-          regionArgs.push({
-            positive: region.prompt,
-            mask,
-            bounds: bounds || undefined,
-          })
-        }
+        regionArgs = await buildRegionArgs(snapshot.regions)
       }
 
       setProgress(0, 'Submitting...')
-      const settings = getSettings()
+      const { width, height } = applyAutoResize(snapshot.width, snapshot.height, settings)
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
-        width: snapshot.width,
-        height: snapshot.height,
+        width,
+        height,
         batch_size: snapshot.batchSize,
         model: checkpoint,
         sampler: finalSampler,
@@ -311,6 +299,10 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
         regions: regionArgs.length > 0 ? regionArgs : undefined,
         mask: maskBase64 || undefined,
+        performance: {
+          max_pixels: settings.maxPixels,
+          resolution_multiplier: settings.resolutionMultiplier,
+        },
         ...(isRefineMode && {
           image: imageBase64,
           strength: snapshot.strength / 100,

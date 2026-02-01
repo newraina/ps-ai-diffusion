@@ -9,12 +9,15 @@ import { RegionSection } from '../components/sections/region-section'
 import { ControlLayerSection } from '../components/sections/control-layer-section'
 import { LoraSection } from '../components/sections/lora-section'
 import { useGeneration } from '../contexts/generation-context'
-import { generate, getJobStatus, getJobImages, cancelJob } from '../services/bridge-client'
+import { generate, getJobStatus, getJobImages, cancelJob, createControlImage } from '../services/bridge-client'
 import { useHistory } from '../contexts/history-context'
 import { hasActiveDocument, getDocumentImageBase64, getLayerImageBase64, updatePreviewLayer, applyAsLayer, deletePreviewLayer } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
+import { applyAutoResize, applyPromptTranslation } from '../utils/generation-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
+import { buildRegionArgs } from '../utils/region-utils'
 import { openBrowser } from '../utils/uxp'
+import { getSettings } from '../services/settings'
 import type { HistoryGroup, HistoryImage } from '../types'
 
 interface LivePanelProps {
@@ -73,12 +76,15 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
     try {
       const isRefineMode = strength < 100
 
+      const settings = getSettings()
+      const translatedPrompt = applyPromptTranslation(prompt, settings)
+      const translatedNegative = applyPromptTranslation(negativePrompt, settings)
       const finalPrompt = style
-        ? applyStylePrompt(style.style_prompt, prompt)
-        : prompt
+        ? applyStylePrompt(style.style_prompt, translatedPrompt)
+        : translatedPrompt
       const finalNegative = style
-        ? mergeNegativePrompts(style.negative_prompt, negativePrompt)
-        : negativePrompt
+        ? mergeNegativePrompts(style.negative_prompt, translatedNegative)
+        : translatedNegative
       const checkpoint = style ? getStyleCheckpoint(style) : ''
       const resolvedStyleSampler = style
         ? resolveStyleSampler(style.sampler)
@@ -122,33 +128,42 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
         }
         for (const layer of activeControlLayers) {
           const img = layer.image ? layer.image : await getLayerImageBase64(layer.layerId!)
+          const bounds = layer.layerId
+            ? await import('../services/photoshop-layer').then(m => m.getLayerBounds(layer.layerId!))
+            : null
+          const processedImage = layer.isPreprocessor
+            ? (await createControlImage({
+              mode: mapControlMode(layer.mode),
+              image: img,
+              bounds: bounds || undefined,
+              seed: fixedSeed ? seed : -1,
+              performance: {
+                max_pixels: settings.maxPixels,
+                resolution_multiplier: settings.resolutionMultiplier,
+              },
+            })).image
+            : img
           controlNetArgs.push({
             mode: mapControlMode(layer.mode),
-            image: img,
+            image: processedImage,
             strength: layer.strength,
-            range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1],
+            range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1] as [number, number],
             preprocessor: layer.isPreprocessor,
           })
         }
       }
 
-      const regionArgs = []
-      const activeRegions = regions.filter(r => r.isVisible && r.prompt.trim() && r.maskBase64)
-      if (activeRegions.length > 0) {
-        for (const region of activeRegions) {
-          regionArgs.push({
-            positive: region.prompt,
-            mask: region.maskBase64!,
-            bounds: region.bounds || undefined,
-          })
-        }
+      let regionArgs = []
+      if (regions.some(r => r.isVisible && r.prompt.trim())) {
+        regionArgs = await buildRegionArgs(regions)
       }
 
+      const { width: finalWidth, height: finalHeight } = applyAutoResize(width, height, settings)
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
-        width,
-        height,
+        width: finalWidth,
+        height: finalHeight,
         steps: finalSteps,
         cfg_scale: finalCfgScale,
         sampler: finalSampler,
@@ -159,6 +174,10 @@ export function LivePanel({ isConnected, onOpenSettings, connectionStatus }: Liv
         loras: loras.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), strength: l.strength })),
         control: controlNetArgs.length > 0 ? controlNetArgs : undefined,
         regions: regionArgs.length > 0 ? regionArgs : undefined,
+        performance: {
+          max_pixels: settings.maxPixels,
+          resolution_multiplier: settings.resolutionMultiplier,
+        },
         ...(isRefineMode && imageBase64 && {
           image: imageBase64,
           strength: strength / 100,

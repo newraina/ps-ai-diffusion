@@ -220,7 +220,6 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
       id: crypto.randomUUID(),
       name: `Region ${state.regions.length + 1}`,
       prompt: '',
-      negativePrompt: '',
       layerId: null,
       maskSource: 'selection',
       maskBase64: null,

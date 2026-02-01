@@ -98,7 +98,12 @@ export interface GenerateRequest {
     image?: string
     strength?: number
     range?: [number, number]
+    preprocessor?: boolean
   }>
+  performance?: {
+    max_pixels?: number
+    resolution_multiplier?: number
+  }
   regions?: Array<{
     positive?: string
     mask: string
@@ -135,6 +140,21 @@ export interface UpscaleRequest {
 export interface GenerateResponse {
   job_id: string
   status: string
+}
+
+export interface ControlImageRequest {
+  mode: string
+  image: string
+  bounds?: { x: number; y: number; width: number; height: number }
+  seed?: number
+  performance?: {
+    max_pixels?: number
+    resolution_multiplier?: number
+  }
+}
+
+export interface ControlImageResponse {
+  image: string
 }
 
 export async function getHealth(): Promise<{ status: string }> {
@@ -264,6 +284,21 @@ export async function getStyles(): Promise<StylesResponse> {
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || error.error || 'Failed to get styles')
+  }
+  return response.json()
+}
+
+export async function createControlImage(
+  request: ControlImageRequest,
+): Promise<ControlImageResponse> {
+  const response = await fetch(getApiUrl('/control-image'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Control image failed')
   }
   return response.json()
 }

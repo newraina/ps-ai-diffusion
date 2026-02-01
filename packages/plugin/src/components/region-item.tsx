@@ -37,10 +37,6 @@ export function RegionItem({ region }: RegionItemProps) {
     updateRegion(region.id, { prompt: value })
   }
 
-  const handleNegativePromptChange = (value: string) => {
-    updateRegion(region.id, { negativePrompt: value })
-  }
-
   const handleSourceChange = (e: Event) => {
     const target = e.target as HTMLSelectElement
     const value = target.value === 'layer' ? 'layer' : 'selection'
@@ -178,16 +174,7 @@ export function RegionItem({ region }: RegionItemProps) {
         />
       </div>
       
-      <div>
-        <PromptInput 
-          value={region.negativePrompt} 
-          onChange={handleNegativePromptChange} 
-          minRows={1} 
-          maxRows={2}
-          isNegative
-          placeholder="Negative Prompt (Optional)"
-        />
-      </div>
+      
     </div>
   )
 }

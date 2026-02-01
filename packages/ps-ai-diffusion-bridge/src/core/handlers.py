@@ -72,6 +72,8 @@ class GenerateParams:
     # - control: optional list like GenerateParams.control
     # - loras: optional list like GenerateParams.loras (payload upload supported)
     regions: list[dict] = field(default_factory=list)
+    # Optional performance settings (best-effort override for resolution)
+    performance: dict | None = None
 
 
 @dataclass
@@ -93,6 +95,16 @@ class UpscaleParams:
     strength: float = 0.35
     tile_overlap: int = -1
     loras: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class ControlImageParams:
+    """Parameters for control image preprocessing."""
+    mode: str
+    image: str
+    bounds: Optional[dict] = None
+    seed: int = -1
+    performance: dict | None = None
 
 
 def get_comfy_url(request_url: Optional[str]) -> str:
@@ -456,6 +468,8 @@ def _build_workflow_input(params: GenerateParams):
     )
     from shared.image import Extent, Bounds, Image
     from shared.resources import ControlMode
+    from shared.settings import PerformanceSettings
+    from shared import resolution
 
     # Parse LoRA tags (best-effort) from prompt.
     prompt_clean, lora_tags = _parse_lora_tags(params.prompt)
@@ -502,6 +516,8 @@ def _build_workflow_input(params: GenerateParams):
                 img_b64 = entry.get("image")
                 img = None
                 if isinstance(img_b64, str) and img_b64:
+                    if "," in img_b64:
+                        img_b64 = img_b64.split(",", 1)[1]
                     img_bytes = base64.b64decode(img_b64)
                     img = Image.from_bytes(img_bytes)
 
@@ -572,6 +588,8 @@ def _build_workflow_input(params: GenerateParams):
             mask_b64 = region_entry.get("mask")
             if not (isinstance(mask_b64, str) and mask_b64):
                 continue
+            if "," in mask_b64:
+                mask_b64 = mask_b64.split(",", 1)[1]
             mask_bytes = base64.b64decode(mask_b64)
             region_mask = Image.from_bytes(mask_bytes)
             if not region_mask.is_mask:
@@ -642,6 +660,23 @@ def _build_workflow_input(params: GenerateParams):
 
     # Build extent
     extent = Extent(params.width, params.height)
+    perf_settings = PerformanceSettings()
+    perf_override = params.performance or {}
+    try:
+        if isinstance(perf_override, dict):
+            max_pixels = perf_override.get("max_pixels")
+            resolution_multiplier = perf_override.get("resolution_multiplier")
+            if max_pixels is not None:
+                perf_settings.max_pixel_count = max(0.0, float(max_pixels)) / 1_000_000
+            if resolution_multiplier is not None:
+                perf_settings.resolution_multiplier = float(resolution_multiplier)
+    except Exception:
+        pass
+
+    if perf_settings.resolution_multiplier != 1.0 or perf_settings.max_pixel_count > 0:
+        extent = resolution.apply_resolution_settings(extent, perf_settings)
+        extent = Extent(int(extent.width), int(extent.height)).multiple_of(8)
+
     extent_input = ExtentInput(
         input=extent,
         initial=extent,
@@ -655,7 +690,10 @@ def _build_workflow_input(params: GenerateParams):
     crop_upscale_extent = None
 
     if params.image:
-        image_bytes = base64.b64decode(params.image)
+        image_b64 = params.image
+        if "," in image_b64:
+            image_b64 = image_b64.split(",", 1)[1]
+        image_bytes = base64.b64decode(image_b64)
         initial_image = Image.from_bytes(image_bytes)
         images = ImageInput(extent=extent_input, initial_image=initial_image)
 
@@ -663,7 +701,10 @@ def _build_workflow_input(params: GenerateParams):
         if not params.image:
             raise ValueError("mask requires image input (inpaint/refine_region)")
 
-        mask_bytes = base64.b64decode(params.mask)
+        mask_b64 = params.mask
+        if "," in mask_b64:
+            mask_b64 = mask_b64.split(",", 1)[1]
+        mask_bytes = base64.b64decode(mask_b64)
         mask_img = Image.from_bytes(mask_bytes)
         if not mask_img.is_mask:
             # Ensure grayscale mask
@@ -1130,6 +1171,83 @@ async def handle_upscale(params: UpscaleParams) -> ApiResponse:
             model=params.model,
         )
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
+    except Exception as e:
+        return ApiResponse(data={"error": str(e)}, status=500)
+
+
+async def handle_control_image(params: ControlImageParams) -> ApiResponse:
+    """Handle control image preprocessing request."""
+    try:
+        import src.path_setup  # noqa: F401
+        import base64 as _b64
+
+        from shared.api import WorkflowKind
+        from shared.image import Image, Bounds
+        from shared.resources import ControlMode
+        from shared.settings import PerformanceSettings
+        from shared.workflow import prepare_create_control_image
+
+        mode_raw = str(params.mode or "").strip().lower()
+        if mode_raw not in ControlMode.__members__:
+            return ApiResponse(data={"error": f"Unknown control mode: {params.mode}"}, status=400)
+
+        image_b64 = params.image
+        if "," in image_b64:
+            image_b64 = image_b64.split(",", 1)[1]
+        image_bytes = _b64.b64decode(image_b64)
+        image = Image.from_bytes(image_bytes)
+
+        perf_settings = PerformanceSettings()
+        perf_override = params.performance or {}
+        if isinstance(perf_override, dict):
+            try:
+                max_pixels = perf_override.get("max_pixels")
+                resolution_multiplier = perf_override.get("resolution_multiplier")
+                if max_pixels is not None:
+                    perf_settings.max_pixel_count = max(0.0, float(max_pixels)) / 1_000_000
+                if resolution_multiplier is not None:
+                    perf_settings.resolution_multiplier = float(resolution_multiplier)
+            except Exception:
+                pass
+
+        bounds = None
+        bounds_data = params.bounds
+        if isinstance(bounds_data, dict):
+            try:
+                bounds = Bounds(
+                    int(bounds_data.get("x", 0)),
+                    int(bounds_data.get("y", 0)),
+                    int(bounds_data.get("width", image.width)),
+                    int(bounds_data.get("height", image.height)),
+                )
+            except Exception:
+                bounds = None
+
+        work = prepare_create_control_image(
+            image=image,
+            mode=ControlMode[mode_raw],
+            performance_settings=perf_settings,
+            bounds=bounds,
+            seed=params.seed,
+        )
+
+        if state.backend_type == BackendType.cloud:
+            if not cloud_manager.is_connected:
+                return ApiResponse(data={"error": "Not connected to cloud service"}, status=503)
+            job_id = await cloud_manager.enqueue(work)
+        else:
+            manager = get_manager()
+            if not manager.is_connected:
+                return ApiResponse(data={"error": "Not connected to ComfyUI"}, status=503)
+            job_id = await manager.enqueue_workflow(work, batch_size=1, seed=params.seed)
+
+        images_response = await handle_get_job_images(job_id)
+        if images_response.status != 200:
+            return images_response
+        images = images_response.data.get("images", [])
+        if not images:
+            return ApiResponse(data={"error": "No images generated"}, status=500)
+        return ApiResponse(data={"image": images[0], "kind": WorkflowKind.control_image.name})
     except Exception as e:
         return ApiResponse(data={"error": str(e)}, status=500)
 

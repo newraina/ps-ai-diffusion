@@ -15,6 +15,7 @@ from src.core.handlers import (
     ApiResponse,
     GenerateParams,
     UpscaleParams,
+    ControlImageParams,
     handle_health,
     handle_get_connection,
     handle_get_diagnostics,
@@ -26,6 +27,7 @@ from src.core.handlers import (
     handle_cancel_job,
     handle_get_styles,
     handle_upscale,
+    handle_control_image,
     handle_custom_workflow,
     handle_auth_sign_in,
     handle_auth_confirm,
@@ -95,8 +97,22 @@ if PromptServer is not None:
             loras=data.get("loras", []) or [],
             control=data.get("control", []) or data.get("controls", []) or [],
             regions=data.get("regions", []) or [],
+            performance=data.get("performance"),
         )
         resp = await handle_generate(params)
+        return _json_response(resp)
+
+    @routes.post(f"{API_PREFIX}/control-image")
+    async def control_image(request):
+        data = await request.json()
+        params = ControlImageParams(
+            mode=data.get("mode", ""),
+            image=data.get("image", ""),
+            bounds=data.get("bounds"),
+            seed=data.get("seed", -1),
+            performance=data.get("performance"),
+        )
+        resp = await handle_control_image(params)
         return _json_response(resp)
 
     @routes.get(f"{API_PREFIX}/jobs/{{job_id}}")

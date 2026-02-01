@@ -35,6 +35,7 @@ export function GenerateButton({
   } = useGeneration()
   const [isModeOpen, setIsModeOpen] = useState(false)
   const [isQueueOpen, setIsQueueOpen] = useState(false)
+  const [queueMode, setQueueMode] = useState<'back' | 'front' | 'replace'>('back')
   const modeRef = useRef<HTMLDivElement>(null)
   const queueRef = useRef<HTMLDivElement>(null)
 
@@ -79,6 +80,25 @@ export function GenerateButton({
     if (isGenerating) return 'cancel'
     if (strength < 100) return 'refine'
     return 'generate'
+  }
+
+  const queueCount = queue.length + (isGenerating ? 1 : 0)
+  const queueIcon: IconName = isGenerating
+    ? 'queue-active'
+    : queue.length > 0
+      ? 'queue-waiting'
+      : 'queue-inactive'
+
+  const handleQueueCurrent = () => {
+    if (queueMode === 'front' && onQueueFront) {
+      onQueueFront()
+      return
+    }
+    if (queueMode === 'replace' && onQueueReplace) {
+      onQueueReplace()
+      return
+    }
+    onQueueCurrent?.()
   }
 
   return (
@@ -132,8 +152,8 @@ export function GenerateButton({
           title="Queue"
           onClick={() => setIsQueueOpen(open => !open)}
         >
-          <Icon name={queue.length > 0 ? 'queue-active' : 'queue-inactive'} size={14} className="queue-icon" />
-          <span className="queue-count">{queue.length}</span>
+          <Icon name={queueIcon} size={14} className="queue-icon" />
+          <span className="queue-count">{queueCount}</span>
         </ActionButton>
         {isQueueOpen && (
           <div className="queue-menu">
@@ -143,36 +163,39 @@ export function GenerateButton({
             <div className="queue-status">
               {isGenerating ? 'Generating…' : 'Idle'}
             </div>
+            <div className="queue-counts">
+              <div className="queue-count-item">
+                <span className="queue-count-label">Document</span>
+                <span className="queue-count-value">{queueCount}</span>
+              </div>
+              <div className="queue-count-item">
+                <span className="queue-count-label">Total</span>
+                <span className="queue-count-value">{queueCount}</span>
+              </div>
+            </div>
             {onQueueCurrent && (
               <div className="queue-actions">
+                <div className="queue-mode">
+                  <label className="queue-mode-label" htmlFor="queue-mode-select">Enqueue</label>
+                  <select
+                    id="queue-mode-select"
+                    className="queue-mode-select"
+                    value={queueMode}
+                    onChange={(event) => setQueueMode(event.target.value as 'back' | 'front' | 'replace')}
+                  >
+                    <option value="back">at the Back</option>
+                    <option value="front">in Front (new jobs first)</option>
+                    <option value="replace">Replace Queue</option>
+                  </select>
+                </div>
                 <button
                   type="button"
                   className="queue-add"
-                  onClick={onQueueCurrent}
+                  onClick={handleQueueCurrent}
                   disabled={queueDisabled}
                 >
                   Queue Current Settings
                 </button>
-                {onQueueFront && (
-                  <button
-                    type="button"
-                    className="queue-add"
-                    onClick={onQueueFront}
-                    disabled={queueDisabled}
-                  >
-                    Queue To Front
-                  </button>
-                )}
-                {onQueueReplace && (
-                  <button
-                    type="button"
-                    className="queue-add"
-                    onClick={onQueueReplace}
-                    disabled={queueDisabled}
-                  >
-                    Replace Queue
-                  </button>
-                )}
               </div>
             )}
             {queue.length === 0 ? (
@@ -197,26 +220,32 @@ export function GenerateButton({
                 ))}
               </div>
             )}
-            {queue.length > 0 && (
-              <div className="queue-actions">
-                <button
-                  type="button"
-                  className="queue-clear"
-                  onClick={() => clearQueue()}
-                >
-                  Clear Queue
-                </button>
-                {onCancelAll && (
-                  <button
-                    type="button"
-                    className="queue-clear"
-                    onClick={onCancelAll}
-                  >
-                    Cancel Active & Clear
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="queue-actions">
+              <button
+                type="button"
+                className="queue-clear"
+                onClick={onClick}
+                disabled={!isGenerating}
+              >
+                Cancel Active
+              </button>
+              <button
+                type="button"
+                className="queue-clear"
+                onClick={() => clearQueue()}
+                disabled={queue.length === 0}
+              >
+                Cancel Queued
+              </button>
+              <button
+                type="button"
+                className="queue-clear"
+                onClick={onCancelAll}
+                disabled={!isGenerating && queue.length === 0}
+              >
+                Cancel All
+              </button>
+            </div>
           </div>
         )}
       </div>

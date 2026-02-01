@@ -10,7 +10,7 @@ import { ControlLayerSection } from '../components/sections/control-layer-sectio
 import { LoraSection } from '../components/sections/lora-section'
 import { useGeneration } from '../contexts/generation-context'
 import { useHistory } from '../contexts/history-context'
-import { generate, getJobStatus, getJobImages, cancelJob } from '../services/bridge-client'
+import { generate, getJobStatus, getJobImages, cancelJob, createControlImage } from '../services/bridge-client'
 import {
   hasActiveDocument,
   hasActiveSelection,
@@ -20,7 +20,10 @@ import {
   placeImageAsLayer,
 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
+import { applyAutoResize, applyPromptTranslation } from '../utils/generation-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
+import { buildRegionArgs } from '../utils/region-utils'
+import { getSettings } from '../services/settings'
 import type { HistoryGroup, HistoryImage } from '../types'
 
 interface AnimationPanelProps {
@@ -113,12 +116,15 @@ export function AnimationPanel({ isConnected, onOpenSettings, connectionStatus }
       ? style.steps
       : steps
 
+    const settings = getSettings()
+    const translatedPrompt = applyPromptTranslation(prompt, settings)
+    const translatedNegative = applyPromptTranslation(negativePrompt, settings)
     const finalPrompt = style
-      ? applyStylePrompt(style.style_prompt, prompt)
-      : prompt
+      ? applyStylePrompt(style.style_prompt, translatedPrompt)
+      : translatedPrompt
     const finalNegative = style
-      ? mergeNegativePrompts(style.negative_prompt, negativePrompt)
-      : negativePrompt
+      ? mergeNegativePrompts(style.negative_prompt, translatedNegative)
+      : translatedNegative
 
     const mapControlMode = (mode: string): string => {
       switch (mode) {
@@ -137,7 +143,6 @@ export function AnimationPanel({ isConnected, onOpenSettings, connectionStatus }
       l => l.isEnabled && (!!l.image || l.layerId !== null),
     )
 
-    const activeRegions = regions.filter(r => r.isVisible && r.prompt.trim() && r.maskBase64)
 
     const historyImages: HistoryImage[] = []
     const groupId = `anim-${Date.now()}`
@@ -164,33 +169,48 @@ export function AnimationPanel({ isConnected, onOpenSettings, connectionStatus }
           imageBase64 = await getDocumentImageBase64()
         }
 
+        let regionArgs = []
+        if (regions.some(r => r.isVisible && r.prompt.trim())) {
+          regionArgs = await buildRegionArgs(regions)
+        }
+
+        const frameSeed = fixedSeed ? (seed + i * step) : -1
+
         const controlNetArgs = []
         if (activeControlLayers.length > 0) {
           for (const layer of activeControlLayers) {
             const img = layer.image ? layer.image : await getLayerImageBase64(layer.layerId!)
+            const bounds = layer.layerId
+              ? await import('../services/photoshop-layer').then(m => m.getLayerBounds(layer.layerId!))
+              : null
+            const processedImage = layer.isPreprocessor
+              ? (await createControlImage({
+                mode: mapControlMode(layer.mode),
+                image: img,
+                bounds: bounds || undefined,
+                seed: frameSeed,
+                performance: {
+                  max_pixels: settings.maxPixels,
+                  resolution_multiplier: settings.resolutionMultiplier,
+                },
+              })).image
+              : img
             controlNetArgs.push({
               mode: mapControlMode(layer.mode),
-              image: img,
+              image: processedImage,
               strength: layer.strength,
-              range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1],
+              range: [layer.rangeStart ?? 0, layer.rangeEnd ?? 1] as [number, number],
               preprocessor: layer.isPreprocessor,
             })
           }
         }
 
-        const regionArgs = activeRegions.map(r => ({
-          positive: r.prompt,
-          mask: r.maskBase64!,
-          bounds: r.bounds || undefined,
-        }))
-
-        const frameSeed = fixedSeed ? (seed + i * step) : -1
-
+        const { width: finalWidth, height: finalHeight } = applyAutoResize(width, height, settings)
         const response = await generate({
           prompt: finalPrompt,
           negative_prompt: finalNegative,
-          width,
-          height,
+          width: finalWidth,
+          height: finalHeight,
           batch_size: 1,
           model: checkpoint,
           sampler: finalSampler,
@@ -205,6 +225,10 @@ export function AnimationPanel({ isConnected, onOpenSettings, connectionStatus }
           regions: regionArgs.length > 0 ? regionArgs : undefined,
           loras: loras.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), strength: l.strength })),
           mask: maskBase64 || undefined,
+          performance: {
+            max_pixels: settings.maxPixels,
+            resolution_multiplier: settings.resolutionMultiplier,
+          },
           ...(imageBase64 && {
             image: imageBase64,
             strength: strength / 100,

@@ -922,6 +922,34 @@ button:disabled {
   color: #999;
 }
 
+.queue-counts {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #2f2f2f;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.queue-count-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-count-label {
+  font-size: 10px;
+  color: #888;
+}
+
+.queue-count-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
 .queue-empty {
   margin-top: 6px;
   font-size: 11px;
@@ -962,6 +990,33 @@ button:disabled {
   margin-top: 8px;
 }
 
+.queue-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.queue-mode-label {
+  font-size: 10px;
+  color: #888;
+}
+
+.queue-mode-select {
+  width: 100%;
+  padding: 4px 6px;
+  background: #2f2f2f;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 11px;
+}
+
+.queue-mode-select:focus {
+  outline: none;
+  border-color: #0d66d0;
+}
+
 .queue-add {
   width: 100%;
   padding: 4px 8px;
@@ -975,6 +1030,10 @@ button:disabled {
 
 .queue-add:hover {
   background: #3a3a3a;
+}
+
+.queue-actions .queue-clear + .queue-clear {
+  margin-top: 6px;
 }
 
 .queue-add:disabled {
@@ -1280,6 +1339,30 @@ button:disabled {
 
 .diagnostics-field {
   margin-top: 12px;
+}
+
+.diagnostics-card {
+  margin-top: 12px;
+  background: #2f2f2f;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.diagnostics-card .diagnostics-actions {
+  margin-top: 0;
+}
+
+.diagnostics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.diagnostics-title {
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .diagnostics-actions {

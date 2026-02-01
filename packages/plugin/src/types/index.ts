@@ -111,7 +111,6 @@ export interface Region {
   id: string
   name: string
   prompt: string
-  negativePrompt: string
   layerId: number | null // Linked Photoshop layer ID
   maskSource: RegionMaskSource
   maskBase64: string | null // base64 PNG (black/white)
