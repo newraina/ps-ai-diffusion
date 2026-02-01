@@ -1,11 +1,34 @@
 // Workspace types
 export type Workspace = 'generation' | 'upscaling' | 'live' | 'animation' | 'custom'
 
-// Style types
+// Style types - matches StyleSummary from API
 export interface Style {
   id: string
   name: string
-  arch: 'sd15' | 'sdxl' | 'flux'
+  architecture: string
+  sampler: string
+  cfg_scale: number
+  steps: number
+  style_prompt: string
+  negative_prompt: string
+  checkpoints: string[]
+}
+
+// Helper to get architecture prefix for display
+export function getArchPrefix(arch: string): string {
+  switch (arch) {
+    case 'sdxl':
+      return 'XL'
+    case 'flux':
+    case 'flux_k':
+      return 'F'
+    case 'sd3':
+      return 'SD3'
+    case 'sd15':
+      return 'SD'
+    default:
+      return ''
+  }
 }
 
 // Inpaint modes
