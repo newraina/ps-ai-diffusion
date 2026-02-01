@@ -4,6 +4,7 @@ This module provides REST API endpoints for the standalone FastAPI service (port
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
@@ -37,6 +38,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PS AI Bridge", version="0.1.0", lifespan=lifespan)
+
+# Enable CORS for UXP plugin access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Request/Response Models (Pydantic for FastAPI validation)

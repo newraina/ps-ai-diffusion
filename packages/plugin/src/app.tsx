@@ -9,8 +9,16 @@ import {
   type ConnectionStatus,
   connect,
   getConnection,
+  setBridgeMode,
 } from './services/bridge-client'
 import { getSettings } from './services/settings'
+
+// Initialize bridge mode from saved settings
+const initialSettings = getSettings()
+setBridgeMode(
+  initialSettings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
+  initialSettings.comfyUrl,
+)
 import { SettingsModal } from './components/settings-modal'
 
 interface AppContentProps {
@@ -20,6 +28,7 @@ interface AppContentProps {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
   handleConnect: () => void
+  handleSettingsClose: () => void
 }
 
 function AppContent({
@@ -29,6 +38,7 @@ function AppContent({
   settingsOpen,
   setSettingsOpen,
   handleConnect,
+  handleSettingsClose,
 }: AppContentProps) {
   const { workspace } = useGeneration()
   const isConnected = connection?.status === 'connected'
@@ -61,9 +71,14 @@ function AppContent({
       {!isConnected ? (
         <div className="connection-section">
           <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
-          <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
-            {loading ? 'Connecting...' : 'Connect to ComfyUI'}
-          </Button>
+          <div className="connection-buttons">
+            <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
+              {loading ? 'Connecting...' : 'Connect to ComfyUI'}
+            </Button>
+            <Button size="s" variant="secondary" onClick={() => setSettingsOpen(true)}>
+              Settings
+            </Button>
+          </div>
         </div>
       ) : (
         renderPanel()
@@ -71,7 +86,7 @@ function AppContent({
 
       <SettingsModal
         isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={handleSettingsClose}
       />
     </div>
   )
@@ -98,20 +113,36 @@ function App() {
 
   async function handleConnect() {
     setLoading(true)
+    setError(null)
     try {
       const settings = getSettings()
+      // Update bridge mode from latest settings
+      setBridgeMode(
+        settings.connectionMode === 'comfyui-extension' ? 'comfyui' : 'standalone',
+        settings.comfyUrl,
+      )
+      // In standalone mode, don't pass comfyUrl - let bridge use its default ComfyUI address
+      // In comfyui-extension mode, pass the ComfyUI URL for the bridge to connect to itself
+      const comfyUrlForBridge = settings.connectionMode === 'comfyui-extension'
+        ? settings.comfyUrl
+        : undefined
       const status = await connect(
         'local',
-        settings.comfyUrl,
+        comfyUrlForBridge,
         settings.authToken || undefined,
       )
       setConnection(status)
-      setError(null)
     } catch {
       setError('Failed to connect')
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleSettingsClose() {
+    setSettingsOpen(false)
+    // Re-check connection with updated settings
+    handleConnect()
   }
 
   return (
@@ -125,6 +156,7 @@ function App() {
             settingsOpen={settingsOpen}
             setSettingsOpen={setSettingsOpen}
             handleConnect={handleConnect}
+            handleSettingsClose={handleSettingsClose}
           />
         </HistoryProvider>
       </GenerationProvider>

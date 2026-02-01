@@ -11,13 +11,12 @@ let apiPrefix = COMFYUI_API_PREFIX
 
 export function setBridgeMode(
   mode: 'comfyui' | 'standalone',
-  comfyUrl: string = DEFAULT_COMFY_URL,
+  url: string = DEFAULT_COMFY_URL,
 ) {
+  baseUrl = url.replace(/\/$/, '')
   if (mode === 'comfyui') {
-    baseUrl = comfyUrl.replace(/\/$/, '')
     apiPrefix = COMFYUI_API_PREFIX
   } else {
-    baseUrl = 'http://localhost:7860'
     apiPrefix = STANDALONE_API_PREFIX
   }
 }
@@ -92,11 +91,16 @@ export async function connect(
   return response.json()
 }
 
-export async function testConnection(
-  comfyUrl: string,
-  authToken?: string,
-): Promise<ConnectionStatus> {
-  return connect('local', comfyUrl, authToken)
+export async function testConnection(): Promise<{ reachable: boolean; error?: string }> {
+  try {
+    const response = await fetch(getApiUrl('/health'))
+    if (response.ok) {
+      return { reachable: true }
+    }
+    return { reachable: false, error: `HTTP ${response.status}` }
+  } catch (e) {
+    return { reachable: false, error: String(e) }
+  }
 }
 
 export interface JobStatus {

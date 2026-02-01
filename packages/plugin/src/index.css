@@ -84,6 +84,16 @@ button:disabled {
   text-align: center;
 }
 
+.connection-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.connection-buttons > * + * {
+  margin-top: 8px;
+}
+
 .generate-panel {
   display: flex;
   flex-direction: column;
@@ -212,6 +222,43 @@ button:disabled {
 
 .text-input::placeholder {
   color: #666;
+}
+
+/* Radio Group */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.radio-group > * + * {
+  margin-top: 8px;
+}
+
+.radio-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.radio-label input[type="radio"] {
+  margin-right: 8px;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.radio-label span {
+  color: #e0e0e0;
+}
+
+.radio-hint {
+  width: 100%;
+  font-size: 10px;
+  color: #666;
+  margin-left: 22px;
+  margin-top: 2px;
 }
 
 .modal-footer {
