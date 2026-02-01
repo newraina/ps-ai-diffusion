@@ -22,6 +22,7 @@ from src.core.handlers import (
     handle_get_job_images,
     handle_get_job_image,
     handle_cancel_job,
+    handle_get_styles,
 )
 
 API_PREFIX = "/api/ps-ai-diffusion-bridge"
@@ -68,6 +69,8 @@ if PromptServer is not None:
             seed=data.get("seed", -1),
             model=data.get("model", ""),
             batch_size=data.get("batch_size", 1),
+            sampler=data.get("sampler", "euler"),
+            scheduler=data.get("scheduler", "normal"),
         )
         resp = await handle_generate(params)
         return _json_response(resp)
@@ -98,4 +101,9 @@ if PromptServer is not None:
     async def cancel_job(request):
         job_id = request.match_info["job_id"]
         resp = await handle_cancel_job(job_id)
+        return _json_response(resp)
+
+    @routes.get(f"{API_PREFIX}/styles")
+    async def get_styles(request):
+        resp = await handle_get_styles()
         return _json_response(resp)

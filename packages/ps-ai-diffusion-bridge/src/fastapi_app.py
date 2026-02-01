@@ -20,6 +20,7 @@ from src.core.handlers import (
     handle_get_job_images,
     handle_get_job_image,
     handle_cancel_job,
+    handle_get_styles,
 )
 
 
@@ -54,6 +55,8 @@ class GenerateRequest(BaseModel):
     seed: int = -1
     model: str = ""
     batch_size: int = 1
+    sampler: str = "euler"
+    scheduler: str = "normal"
 
 
 class GenerateResponse(BaseModel):
@@ -114,6 +117,8 @@ async def generate(request: GenerateRequest):
         seed=request.seed,
         model=request.model,
         batch_size=request.batch_size,
+        sampler=request.sampler,
+        scheduler=request.scheduler,
     )
     resp = await handle_generate(params)
     if resp.status != 200:
@@ -155,4 +160,13 @@ async def cancel_job(job_id: str):
     resp = await handle_cancel_job(job_id)
     if resp.status != 200:
         raise HTTPException(status_code=resp.status, detail=resp.data.get("error"))
+    return resp.data
+
+
+# Styles Endpoints
+
+@app.get("/api/styles")
+async def get_styles():
+    """Get available styles."""
+    resp = await handle_get_styles()
     return resp.data
