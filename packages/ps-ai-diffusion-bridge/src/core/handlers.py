@@ -11,6 +11,7 @@ from typing import Optional
 from .state import state, ConnectionStatus, BackendType
 from .comfy_client_manager import get_manager, JobStatus
 from .styles import load_styles, get_style_summary
+from .upscaler import build_upscale_workflow, DEFAULT_UPSCALE_MODEL, MAX_INPUT_SIZE
 
 
 DEFAULT_COMFY_URL = "http://localhost:8188"
@@ -37,6 +38,14 @@ class GenerateParams:
     batch_size: int = 1
     sampler: str = "euler"
     scheduler: str = "normal"
+
+
+@dataclass
+class UpscaleParams:
+    """Parameters for image upscaling."""
+    image: str  # Base64 encoded PNG
+    factor: float = 2.0
+    model: str = ""
 
 
 def get_comfy_url(request_url: Optional[str]) -> str:
@@ -240,3 +249,35 @@ async def handle_get_styles() -> ApiResponse:
     styles = load_styles()
     summaries = [get_style_summary(s) for s in styles]
     return ApiResponse(data={"styles": summaries})
+
+
+async def handle_upscale(params: UpscaleParams) -> ApiResponse:
+    """Handle upscale request.
+
+    Returns:
+        ApiResponse with job_id and status, or error with status 400/503/500.
+    """
+    # Validate factor first (client error takes priority)
+    if params.factor not in (2.0, 4.0):
+        return ApiResponse(
+            data={"error": "Factor must be 2.0 or 4.0"},
+            status=400
+        )
+
+    manager = get_manager()
+
+    if not manager.is_connected:
+        return ApiResponse(
+            data={"error": "Not connected to ComfyUI"},
+            status=503
+        )
+
+    try:
+        job_id = await manager.enqueue_upscale(
+            image_base64=params.image,
+            factor=params.factor,
+            model=params.model,
+        )
+        return ApiResponse(data={"job_id": job_id, "status": "queued"})
+    except Exception as e:
+        return ApiResponse(data={"error": str(e)}, status=500)

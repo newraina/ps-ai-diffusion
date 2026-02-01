@@ -276,6 +276,99 @@ class ComfyClientManager:
         """Get job state by ID."""
         return self.jobs.get(job_id)
 
+    async def enqueue_upscale(
+        self,
+        image_base64: str,
+        factor: float = 2.0,
+        model: str = "",
+    ) -> str:
+        """Submit an upscale job and return job_id."""
+        if not self._session or not self._is_connected:
+            raise Exception("Not connected to ComfyUI")
+
+        from .upscaler import build_upscale_workflow
+
+        job_id = str(uuid.uuid4())
+
+        # Upload image to ComfyUI input folder via API
+        image_filename = await self._upload_image(image_base64)
+
+        # Build workflow
+        workflow = build_upscale_workflow(
+            image_filename=image_filename,
+            factor=factor,
+            model=model,
+        )
+
+        # Initialize job state (no sampling steps for upscale)
+        self.jobs[job_id] = JobState(
+            status=JobStatus.queued,
+            node_count=len(workflow),
+            sample_count=1,  # No sampling, just one pass
+            batch_size=1,
+            seed=0,
+        )
+
+        # Submit to ComfyUI
+        data = {
+            "prompt": workflow,
+            "client_id": self.client_id,
+            "prompt_id": job_id,
+        }
+
+        try:
+            async with self._session.post(
+                f"{self.url}/prompt",
+                json=data,
+                timeout=30
+            ) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise Exception(f"Failed to submit job: {error_text}")
+                result = await resp.json()
+
+                if result.get("prompt_id") != job_id:
+                    logger.warning(f"Prompt ID mismatch: expected {job_id}, got {result.get('prompt_id')}")
+
+                logger.info(f"Upscale job {job_id} submitted successfully")
+                return job_id
+
+        except Exception as e:
+            self.jobs[job_id].status = JobStatus.error
+            self.jobs[job_id].error = str(e)
+            raise
+
+    async def _upload_image(self, image_base64: str) -> str:
+        """Upload a base64 image to ComfyUI and return the filename."""
+        import base64
+
+        # Strip data URL prefix if present
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
+
+        image_data = base64.b64decode(image_base64)
+        filename = f"ps_upscale_{uuid.uuid4().hex[:8]}.png"
+
+        # Use ComfyUI's upload API
+        form_data = aiohttp.FormData()
+        form_data.add_field(
+            'image',
+            image_data,
+            filename=filename,
+            content_type='image/png'
+        )
+
+        async with self._session.post(
+            f"{self.url}/upload/image",
+            data=form_data,
+            timeout=60
+        ) as resp:
+            if resp.status != 200:
+                error_text = await resp.text()
+                raise Exception(f"Failed to upload image: {error_text}")
+            result = await resp.json()
+            return result.get("name", filename)
+
     async def cancel(self, job_id: str) -> bool:
         """Cancel a job."""
         if not self._session:
