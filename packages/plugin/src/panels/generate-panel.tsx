@@ -13,7 +13,7 @@ import {
   getJobImages,
   cancelJob,
 } from '../services/bridge-client'
-import { hasActiveDocument } from '../services/photoshop-layer'
+import { hasActiveDocument, getDocumentImageBase64 } from '../services/photoshop-layer'
 import { applyStylePrompt, mergeNegativePrompts, getStyleCheckpoint } from '../utils/style-utils'
 import { resolveStyleSampler } from '../utils/sampler-utils'
 import type { HistoryGroup, HistoryImage } from '../types'
@@ -66,10 +66,23 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
     }
 
     setIsGenerating(true)
-    setProgress(0, 'Submitting...')
+    setProgress(0)
     cancelledRef.current = false
 
     try {
+      // Check if we're in refine mode (strength < 100)
+      const isRefineMode = strength < 100
+      let imageBase64: string | undefined
+
+      if (isRefineMode) {
+        setProgress(0, 'Capturing document...')
+        try {
+          imageBase64 = await getDocumentImageBase64()
+        } catch (error) {
+          throw new Error(`Failed to capture document: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
       // Apply style configuration
       const finalPrompt = style
         ? applyStylePrompt(style.style_prompt, prompt)
@@ -85,6 +98,7 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
       const steps = style?.steps ?? 20
 
       // Submit generation job
+      setProgress(0, 'Submitting...')
       const response = await generate({
         prompt: finalPrompt,
         negative_prompt: finalNegative,
@@ -96,6 +110,11 @@ export function GeneratePanel({ isConnected, onOpenSettings, connectionStatus }:
         scheduler,
         cfg_scale: cfgScale,
         steps,
+        // img2img params (only included when refining)
+        ...(isRefineMode && {
+          image: imageBase64,
+          strength: strength / 100,  // Convert 0-100 to 0.0-1.0
+        }),
       })
 
       const jobId = response.job_id
