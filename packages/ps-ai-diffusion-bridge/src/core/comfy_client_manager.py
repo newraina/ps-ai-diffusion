@@ -130,6 +130,112 @@ def build_txt2img_workflow(
     return workflow, seed
 
 
+def build_img2img_workflow(
+    image_filename: str,
+    prompt: str,
+    negative_prompt: str = "",
+    width: int = 512,
+    height: int = 512,
+    steps: int = 20,
+    cfg_scale: float = 7.0,
+    seed: int = -1,
+    checkpoint: str = "",
+    batch_size: int = 1,
+    sampler: str = "euler",
+    scheduler: str = "normal",
+    strength: float = 0.7,
+) -> tuple[dict, int]:
+    """Build an img2img workflow for ComfyUI.
+
+    Uses the input image as starting point and denoises from start_step.
+    Strength controls how much of the original image to preserve:
+    - strength=1.0: full denoise (like txt2img)
+    - strength=0.5: 50% denoise, preserve 50% of original
+    - strength=0.0: no denoise (return original)
+
+    Returns:
+        tuple of (workflow dict, actual seed used)
+    """
+    if seed < 0:
+        seed = int(uuid.uuid4().int % (2**31))
+
+    # Calculate start_step from strength
+    # strength=0.7 means denoise 70%, so start at 30% of steps
+    start_step = round(steps * (1 - strength))
+
+    # Use default checkpoint if not specified
+    ckpt_name = checkpoint or "v1-5-pruned-emaonly.safetensors"
+
+    workflow = {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": ckpt_name
+            }
+        },
+        "2": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": image_filename
+            }
+        },
+        "3": {
+            "class_type": "VAEEncode",
+            "inputs": {
+                "pixels": ["2", 0],
+                "vae": ["1", 2]
+            }
+        },
+        "4": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": prompt,
+                "clip": ["1", 1]
+            }
+        },
+        "5": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": negative_prompt,
+                "clip": ["1", 1]
+            }
+        },
+        "6": {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": seed,
+                "steps": steps,
+                "cfg": cfg_scale,
+                "sampler_name": sampler,
+                "scheduler": scheduler,
+                "denoise": 1.0,
+                "model": ["1", 0],
+                "positive": ["4", 0],
+                "negative": ["5", 0],
+                "latent_image": ["3", 0],
+                "start_at_step": start_step,
+                "end_at_step": steps,
+            }
+        },
+        "7": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["6", 0],
+                "vae": ["1", 2]
+            }
+        },
+        "8": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "filename_prefix": "ps_ai_diffusion",
+                "images": ["7", 0]
+            }
+        }
+    }
+
+    return workflow, seed
+
+
 class ComfyClientManager:
     """Manages ComfyUI connection and job execution."""
 
