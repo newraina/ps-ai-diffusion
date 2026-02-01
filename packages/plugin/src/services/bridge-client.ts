@@ -46,6 +46,7 @@ export interface GenerateRequest {
   cfg_scale?: number
   seed?: number
   image?: string
+  strength?: number // 0.0-1.0, denoise strength for img2img
   mask?: string
   batch_size?: number
   sampler?: string
