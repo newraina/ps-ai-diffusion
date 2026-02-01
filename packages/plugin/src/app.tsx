@@ -3,6 +3,7 @@ import { Button } from '@swc-react/button'
 import { GeneratePanel } from './panels/generate-panel'
 import { GenerationProvider } from './contexts/generation-context'
 import { HistoryProvider } from './contexts/history-context'
+import { StylesProvider } from './contexts/styles-context'
 import {
   type ConnectionStatus,
   connect,
@@ -51,33 +52,35 @@ function App() {
   }
 
   return (
-    <GenerationProvider>
-      <HistoryProvider>
-        <div className="app">
-          {error && <sp-body size="S" className="error">{error}</sp-body>}
+    <StylesProvider>
+      <GenerationProvider>
+        <HistoryProvider>
+          <div className="app">
+            {error && <sp-body size="S" className="error">{error}</sp-body>}
 
-          {!isConnected ? (
-            <div className="connection-section">
-              <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
-              <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
-                {loading ? 'Connecting...' : 'Connect to ComfyUI'}
-              </Button>
-            </div>
-          ) : (
-            <GeneratePanel
-              isConnected={isConnected}
-              onOpenSettings={() => setSettingsOpen(true)}
-              connectionStatus={connection?.status}
+            {!isConnected ? (
+              <div className="connection-section">
+                <sp-body size="S">Status: {connection?.status ?? 'unknown'}</sp-body>
+                <Button size="s" variant="primary" onClick={handleConnect} disabled={loading}>
+                  {loading ? 'Connecting...' : 'Connect to ComfyUI'}
+                </Button>
+              </div>
+            ) : (
+              <GeneratePanel
+                isConnected={isConnected}
+                onOpenSettings={() => setSettingsOpen(true)}
+                connectionStatus={connection?.status}
+              />
+            )}
+
+            <SettingsModal
+              isOpen={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
             />
-          )}
-
-          <SettingsModal
-            isOpen={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-          />
-        </div>
-      </HistoryProvider>
-    </GenerationProvider>
+          </div>
+        </HistoryProvider>
+      </GenerationProvider>
+    </StylesProvider>
   )
 }
 
