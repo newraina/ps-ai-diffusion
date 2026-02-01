@@ -1,10 +1,11 @@
 import type { Style, HistoryGroup, Workspace } from '../types'
 
+// Mock styles for development/fallback - matches Style interface
 export const mockStyles: Style[] = [
-  { id: 'digital-art-xl', name: 'Digital Artwork (XL)', arch: 'sdxl' },
-  { id: 'realistic-xl', name: 'Realistic Vision (XL)', arch: 'sdxl' },
-  { id: 'anime-xl', name: 'Anime Art (XL)', arch: 'sdxl' },
-  { id: 'sd15-default', name: 'SD 1.5 Default', arch: 'sd15' },
+  { id: 'digital-art-xl', name: 'Digital Artwork', architecture: 'sdxl', sampler: 'dpmpp_2m', cfg_scale: 7, steps: 25, style_prompt: '', negative_prompt: '', checkpoints: [] },
+  { id: 'realistic-xl', name: 'Realistic Vision', architecture: 'sdxl', sampler: 'dpmpp_2m', cfg_scale: 7, steps: 25, style_prompt: '', negative_prompt: '', checkpoints: [] },
+  { id: 'anime-xl', name: 'Anime Art', architecture: 'sdxl', sampler: 'dpmpp_2m', cfg_scale: 7, steps: 25, style_prompt: '', negative_prompt: '', checkpoints: [] },
+  { id: 'sd15-default', name: 'SD 1.5 Default', architecture: 'sd15', sampler: 'dpmpp_2m', cfg_scale: 7, steps: 25, style_prompt: '', negative_prompt: '', checkpoints: [] },
 ]
 
 export const workspaceLabels: Record<Workspace, string> = {

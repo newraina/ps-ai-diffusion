@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { ActionButton } from '@swc-react/action-button'
-// TODO: Add Picker and MenuItem imports when @swc-react/picker and @swc-react/menu are installed
 import { useGeneration } from '../contexts/generation-context'
-import { mockStyles, workspaceLabels } from '../services/mock-data'
+import { useStyles } from '../contexts/styles-context'
+import { workspaceLabels } from '../services/mock-data'
+import { getArchPrefix } from '../types'
 import type { Workspace } from '../types'
 
 const workspaceIcons: Record<Workspace, string> = {
@@ -19,10 +21,18 @@ interface StyleSelectorProps {
 
 export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelectorProps) {
   const { workspace, setWorkspace, style, setStyle } = useGeneration()
+  const { styles, isLoading } = useStyles()
+
+  // Auto-select first style when styles load
+  useEffect(() => {
+    if (!style && styles.length > 0) {
+      setStyle(styles[0])
+    }
+  }, [styles, style, setStyle])
 
   const handleStyleChange = (e: Event) => {
     const target = e.target as HTMLSelectElement
-    const selected = mockStyles.find(s => s.id === target.value)
+    const selected = styles.find(s => s.id === target.value)
     if (selected) {
       setStyle(selected)
     }
@@ -57,12 +67,20 @@ export function StyleSelector({ onOpenSettings, connectionStatus }: StyleSelecto
         className="style-dropdown"
         value={style?.id || ''}
         onChange={handleStyleChange as any}
+        disabled={isLoading}
       >
-        {mockStyles.map(s => (
-          <option key={s.id} value={s.id}>
-            {s.arch === 'sdxl' ? 'XL' : s.arch === 'flux' ? 'F' : 'SD'} {s.name}
-          </option>
-        ))}
+        {isLoading ? (
+          <option>Loading...</option>
+        ) : (
+          styles.map(s => {
+            const prefix = getArchPrefix(s.architecture)
+            return (
+              <option key={s.id} value={s.id}>
+                {prefix ? `${prefix} ` : ''}{s.name}
+              </option>
+            )
+          })
+        )}
       </select>
 
       <ActionButton

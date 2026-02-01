@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import type { GenerationState, Workspace, Style, InpaintMode } from '../types'
-import { mockStyles } from '../services/mock-data'
 
 interface GenerationContextValue extends GenerationState {
   setWorkspace: (workspace: Workspace) => void
@@ -19,7 +18,7 @@ interface GenerationContextValue extends GenerationState {
 
 const defaultState: GenerationState = {
   workspace: 'generation',
-  style: mockStyles[0],
+  style: null,  // Will be set when styles load
   prompt: '',
   negativePrompt: '',
   strength: 100,
