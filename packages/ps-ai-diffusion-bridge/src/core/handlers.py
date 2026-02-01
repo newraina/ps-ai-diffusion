@@ -38,6 +38,8 @@ class GenerateParams:
     batch_size: int = 1
     sampler: str = "euler"
     scheduler: str = "normal"
+    image: Optional[str] = None  # Base64 PNG for img2img
+    strength: float = 1.0  # Denoise strength (1.0 = full, 0.0 = none)
 
 
 @dataclass
@@ -132,6 +134,8 @@ async def handle_generate(params: GenerateParams) -> ApiResponse:
             batch_size=params.batch_size,
             sampler=params.sampler,
             scheduler=params.scheduler,
+            image=params.image,
+            strength=params.strength,
         )
         return ApiResponse(data={"job_id": job_id, "status": "queued"})
     except Exception as e:

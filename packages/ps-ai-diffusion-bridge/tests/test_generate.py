@@ -41,3 +41,21 @@ async def test_job_images_not_found():
         response = await client.get("/api/jobs/nonexistent-job-id/images")
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_generate_accepts_image_and_strength():
+    """Test that generate endpoint accepts image and strength params."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # This will return 503 (not connected), but should not return 422 (validation error)
+        response = await client.post("/api/generate", json={
+            "prompt": "a cat",
+            "width": 512,
+            "height": 512,
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "strength": 0.7,
+        })
+
+    # Should be 503 (not connected) rather than 422 (validation error)
+    assert response.status_code == 503
